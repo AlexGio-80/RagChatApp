@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Chat App</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>📚 RAG Chat Application</h1>
+            <p>Carica documenti e chatta con l'AI utilizzando il contenuto come contesto</p>
+        </header>
+
+        <!-- Tab Navigation -->
+        <nav class="tab-navigation">
+            <button class="tab-btn active" data-tab="documents">
+                📄 Gestione Documenti
+            </button>
+            <button class="tab-btn" data-tab="chat">
+                💬 Chat AI
+            </button>
+        </nav>
+
+        <!-- Documents Tab Content -->
+        <section id="documents-tab" class="tab-content active">
+            <div class="glass-panel">
+                <h2>Gestione Documenti</h2>
+
+                <!-- Upload Section -->
+                <div class="upload-section">
+                    <div class="upload-methods">
+                        <!-- File Upload -->
+                        <div class="upload-method">
+                            <h3>Carica File</h3>
+                            <div class="drop-zone" id="dropZone">
+                                <div class="drop-zone-content">
+                                    <span class="upload-icon">📁</span>
+                                    <p>Trascina i file qui o clicca per selezionare</p>
+                                    <p class="file-types">Supportati: .txt, .pdf, .doc, .docx</p>
+                                    <input type="file" id="fileInput" multiple accept=".txt,.pdf,.doc,.docx" hidden>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Text Input -->
+                        <div class="upload-method">
+                            <h3>Indicizza Testo</h3>
+                            <div class="text-input-section">
+                                <input type="text" id="textTitle" placeholder="Titolo del documento" maxlength="255">
+                                <textarea id="textContent" placeholder="Incolla qui il testo da indicizzare..." rows="8"></textarea>
+                                <button id="indexTextBtn" class="btn btn-primary">
+                                    <span class="btn-icon">🔍</span>
+                                    Indicizza Testo
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Documents List -->
+                <div class="documents-section">
+                    <div class="section-header">
+                        <h3>Documenti Caricati</h3>
+                        <button id="refreshBtn" class="btn btn-secondary">
+                            <span class="btn-icon">🔄</span>
+                            Aggiorna
+                        </button>
+                    </div>
+                    <div class="documents-list" id="documentsList">
+                        <div class="loading" id="documentsLoading">Caricamento documenti...</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Chat Tab Content -->
+        <section id="chat-tab" class="tab-content">
+            <div class="glass-panel chat-container">
+                <h2>Chat con AI</h2>
+
+                <!-- Chat Messages -->
+                <div class="chat-messages" id="chatMessages">
+                    <div class="welcome-message">
+                        <div class="message bot-message">
+                            <div class="message-content">
+                                <p>👋 Benvenuto nella chat RAG! Puoi farmi domande sui documenti che hai caricato.</p>
+                                <p>Esempi di domande che puoi fare:</p>
+                                <ul>
+                                    <li>• "Riassumi i contenuti principali"</li>
+                                    <li>• "Quali sono i requisiti di sistema?"</li>
+                                    <li>• "Trova informazioni su [argomento specifico]"</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Input -->
+                <div class="chat-input-container">
+                    <div class="chat-settings">
+                        <label>
+                            <input type="range" id="maxChunks" min="1" max="10" value="5">
+                            Chunk massimi: <span id="maxChunksValue">5</span>
+                        </label>
+                        <label>
+                            <input type="range" id="similarityThreshold" min="0.1" max="1" step="0.1" value="0.7">
+                            Soglia similarità: <span id="similarityValue">0.7</span>
+                        </label>
+                    </div>
+                    <div class="chat-input">
+                        <textarea id="messageInput" placeholder="Scrivi la tua domanda..." rows="2"></textarea>
+                        <button id="sendBtn" class="btn btn-primary">
+                            <span class="btn-icon">💬</span>
+                            Invia
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Status Bar -->
+        <div class="status-bar" id="statusBar">
+            <span id="statusText">Pronto</span>
+            <span id="modeIndicator" class="mode-indicator">MOCK</span>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
