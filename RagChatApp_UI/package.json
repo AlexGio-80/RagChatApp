@@ -1,0 +1,34 @@
+{
+  "name": "ragchatapp-ui",
+  "version": "1.0.0",
+  "description": "Frontend for RAG Chat Application - document upload and AI chat interface",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx http-server . -p 3000 -c-1 -o",
+    "serve": "npx http-server . -p 3000 -c-1",
+    "dev": "npx live-server --port=3000 --entry-file=index.html"
+  },
+  "keywords": [
+    "rag",
+    "chat",
+    "frontend",
+    "glassmorphism",
+    "html",
+    "css",
+    "javascript"
+  ],
+  "author": "Claude Code",
+  "license": "MIT",
+  "devDependencies": {
+    "http-server": "^14.1.1",
+    "live-server": "^1.2.2"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "browserslist": [
+    "last 2 versions",
+    "not dead",
+    "> 0.2%"
+  ]
+}

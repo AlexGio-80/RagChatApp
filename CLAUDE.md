@@ -42,9 +42,19 @@ dotnet run                  # Run the server (includes auto-database migration)
 **Frontend (RagChatApp_UI)**:
 ```bash
 cd RagChatApp_UI
-# Open index.html in browser or serve with live server
-# No build process required for static HTML/CSS/JS
+
+# Option 1: Using npm (recommended for development)
+npm install      # Install development server dependencies
+npm start        # Start development server on http://localhost:3000
+
+# Option 2: Direct file access
+# Open index.html directly in browser (limited functionality due to CORS)
+
+# Option 3: Using live-server (if installed globally)
+npx live-server --port=3000 --entry-file=index.html
 ```
+- **Development URL**: `http://localhost:3000`
+- **Static files**: HTML/CSS/JS (no build process required)
 
 ### 🗄️ Database Management
 
