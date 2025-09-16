@@ -46,6 +46,25 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+// Auto-migrate database on startup
+using (var scope = app.Services.CreateScope())
+{
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    var context = scope.ServiceProvider.GetRequiredService<RagChatDbContext>();
+
+    try
+    {
+        logger.LogInformation("Starting database migration...");
+        await context.Database.MigrateAsync();
+        logger.LogInformation("Database migration completed successfully.");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "An error occurred during database migration.");
+        throw; // Re-throw to prevent startup if database migration fails
+    }
+}
+
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {

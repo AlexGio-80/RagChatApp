@@ -26,7 +26,106 @@ RagChatApp - A RAG (Retrieval-Augmented Generation) chat application that allows
 
 ## Development Commands
 
-*This section will be updated once the project structure is established*
+### 🚀 Running the Application
+
+**Backend Server (RagChatApp_Server)**:
+```bash
+cd RagChatApp_Server
+dotnet restore              # Restore NuGet packages
+dotnet build                # Build the project
+dotnet run                  # Run the server (includes auto-database migration)
+```
+- **Default URL**: `https://localhost:7297`
+- **Swagger UI**: `https://localhost:7297/swagger`
+- **Health Check**: `https://localhost:7297/health`
+
+**Frontend (RagChatApp_UI)**:
+```bash
+cd RagChatApp_UI
+# Open index.html in browser or serve with live server
+# No build process required for static HTML/CSS/JS
+```
+
+### 🗄️ Database Management
+
+**Important**: Database migrations now run automatically on server startup!
+
+**Manual Commands** (for development only):
+```bash
+# View migration status
+dotnet ef migrations list
+
+# Create new migration (when models change)
+dotnet ef migrations add MigrationName
+
+# Remove last migration (if not applied)
+dotnet ef migrations remove
+
+# Manual database update (not needed - auto-migrates on startup)
+dotnet ef database update
+
+# Reset database (development only)
+dotnet ef database drop --force
+dotnet run  # Will recreate with auto-migration
+```
+
+### 🧪 Testing Commands
+
+```bash
+# Build verification
+dotnet build
+
+# Unit tests (when implemented)
+dotnet test
+
+# API testing with curl
+curl -X GET "https://localhost:7297/health"
+curl -X GET "https://localhost:7297/api/info"
+```
+
+### 🔧 Development Tools
+
+**Package Management**:
+```bash
+# Add new package
+dotnet add package PackageName
+
+# List installed packages
+dotnet list package
+
+# Update packages
+dotnet restore
+```
+
+**Project Structure**:
+```bash
+# View project structure (Windows)
+tree /F RagChatApp_Server
+tree /F RagChatApp_UI
+
+# Alternative with PowerShell
+Get-ChildItem -Recurse -Name
+```
+
+### 📋 Pre-Deployment Checklist
+
+Before deploying or committing:
+```bash
+# 1. Build check
+dotnet build
+
+# 2. Clean and rebuild
+dotnet clean
+dotnet build
+
+# 3. Test auto-migration (reset database)
+dotnet ef database drop --force
+dotnet run  # Should auto-migrate
+
+# 4. Verify endpoints
+curl -X GET "https://localhost:7297/health"
+curl -X GET "https://localhost:7297/api/info"
+```
 
 ## 🚨 MANDATORY API DEVELOPMENT CHECKLIST
 
