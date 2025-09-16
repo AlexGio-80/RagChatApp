@@ -118,25 +118,39 @@ public class AzureOpenAIService : IAzureOpenAIService
         var queryEmbedding = await GenerateEmbeddingsAsync(query);
 
         // In a real implementation, you would use vector similarity search
-        // For now, we'll use a simple text-based search as fallback
+        // For now, we'll use an improved text-based search as fallback
+        
+        // Extract meaningful keywords from query
+        var keywords = ExtractKeywords(query);
+        
         var chunks = await _context.DocumentChunks
             .Include(c => c.Document)
-            .Where(c => c.Content.Contains(query) ||
-                       (c.HeaderContext != null && c.HeaderContext.Contains(query)))
+            .Where(c => 
+                // Full phrase match (highest priority)
+                c.Content.ToLower().Contains(query.ToLower()) ||
+                (c.HeaderContext != null && c.HeaderContext.ToLower().Contains(query.ToLower())) ||
+                // Keyword matching (fallback)
+                keywords.Any(keyword => 
+                    c.Content.ToLower().Contains(keyword.ToLower()) ||
+                    (c.HeaderContext != null && c.HeaderContext.ToLower().Contains(keyword.ToLower()))
+                )
+            )
             .OrderBy(c => c.DocumentId)  // First order by document
             .ThenBy(c => c.ChunkIndex)   // Then by chunk order within document
             .Take(maxResults)
-            .Select(c => new ChatSource
-            {
-                DocumentId = c.DocumentId,
-                DocumentName = c.Document.FileName,
-                Content = c.Content,
-                HeaderContext = c.HeaderContext,
-                SimilarityScore = 0.8 // Mock similarity score
-            })
             .ToListAsync();
 
-        return chunks;
+        // Calculate relevance scores after database query
+        var result = chunks.Select(c => new ChatSource
+        {
+            DocumentId = c.DocumentId,
+            DocumentName = c.Document.FileName,
+            Content = c.Content,
+            HeaderContext = c.HeaderContext,
+            SimilarityScore = CalculateRelevanceScore(c, query, keywords)
+        }).ToList();
+
+        return result;
     }
 
     /// <summary>
@@ -226,25 +240,38 @@ public class AzureOpenAIService : IAzureOpenAIService
 
     private async Task<List<ChatSource>> FindSimilarChunksMockAsync(string query, int maxResults)
     {
-        // Simple text-based search for mock mode
+        // Extract meaningful keywords from query
+        var keywords = ExtractKeywords(query);
+        
+        // Improved text-based search for mock mode
         var chunks = await _context.DocumentChunks
             .Include(c => c.Document)
-            .Where(c => c.Content.ToLower().Contains(query.ToLower()) ||
-                       (c.HeaderContext != null && c.HeaderContext.ToLower().Contains(query.ToLower())))
+            .Where(c => 
+                // Full phrase match (highest priority)
+                c.Content.ToLower().Contains(query.ToLower()) ||
+                (c.HeaderContext != null && c.HeaderContext.ToLower().Contains(query.ToLower())) ||
+                // Keyword matching (fallback)
+                keywords.Any(keyword => 
+                    c.Content.ToLower().Contains(keyword.ToLower()) ||
+                    (c.HeaderContext != null && c.HeaderContext.ToLower().Contains(keyword.ToLower()))
+                )
+            )
             .OrderBy(c => c.DocumentId)  // First order by document
             .ThenBy(c => c.ChunkIndex)   // Then by chunk order within document
             .Take(maxResults)
-            .Select(c => new ChatSource
-            {
-                DocumentId = c.DocumentId,
-                DocumentName = c.Document.FileName,
-                Content = c.Content,
-                HeaderContext = c.HeaderContext,
-                SimilarityScore = 0.85 // Mock similarity score
-            })
             .ToListAsync();
 
-        return chunks;
+        // Calculate relevance scores after database query
+        var result = chunks.Select(c => new ChatSource
+        {
+            DocumentId = c.DocumentId,
+            DocumentName = c.Document.FileName,
+            Content = c.Content,
+            HeaderContext = c.HeaderContext,
+            SimilarityScore = CalculateRelevanceScore(c, query, keywords)
+        }).ToList();
+
+        return result;
     }
 
     private ChatResponse GenerateMockChatResponse(ChatRequest request, List<ChatSource> sources)
@@ -304,5 +331,65 @@ public class AzureOpenAIService : IAzureOpenAIService
         var bytes = new byte[floats.Length * 4];
         Buffer.BlockCopy(floats, 0, bytes, 0, bytes.Length);
         return bytes;
+    }
+
+    /// <summary>
+    /// Extract meaningful keywords from search query
+    /// </summary>
+    private List<string> ExtractKeywords(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return new List<string>();
+
+        // Common stop words to filter out
+        var stopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by", "from",
+            "as", "is", "was", "are", "were", "be", "been", "have", "has", "had", "do", "does",
+            "did", "will", "would", "should", "could", "can", "may", "might", "a", "an", "that",
+            "this", "these", "those", "what", "which", "who", "when", "where", "why", "how",
+            "quali", "sono", "che", "cosa", "come", "dove", "quando", "perché", "per", "con",
+            "di", "da", "su", "in", "il", "la", "lo", "le", "gli", "una", "un", "dei", "delle"
+        };
+
+        // Split query into words and filter
+        var keywords = query
+            .Split(new char[] { ' ', ',', '.', '!', '?', ';', ':', '\t', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Where(word => word.Length > 2 && !stopWords.Contains(word))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return keywords;
+    }
+
+    /// <summary>
+    /// Calculate relevance score for a chunk based on query matching
+    /// </summary>
+    private double CalculateRelevanceScore(DocumentChunk chunk, string originalQuery, List<string> keywords)
+    {
+        double score = 0.5; // Base score
+
+        var content = (chunk.Content ?? "").ToLower();
+        var header = (chunk.HeaderContext ?? "").ToLower();
+        var query = originalQuery.ToLower();
+
+        // Exact phrase match in header gets highest score
+        if (header.Contains(query))
+            score = 0.95;
+        // Exact phrase match in content gets high score
+        else if (content.Contains(query))
+            score = 0.9;
+        else
+        {
+            // Calculate score based on keyword matches
+            int headerMatches = keywords.Count(k => header.Contains(k.ToLower()));
+            int contentMatches = keywords.Count(k => content.Contains(k.ToLower()));
+            
+            // Header matches are weighted more heavily
+            double keywordScore = (headerMatches * 0.3 + contentMatches * 0.1) / Math.Max(keywords.Count, 1);
+            score = Math.Max(score, 0.6 + keywordScore);
+        }
+
+        return Math.Min(score, 0.99); // Cap at 0.99
     }
 }

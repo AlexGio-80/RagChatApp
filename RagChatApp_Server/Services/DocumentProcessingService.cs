@@ -43,6 +43,7 @@ public class DocumentProcessingService : IDocumentProcessingService
                 "text/plain" => await ExtractFromTextFileAsync(file),
                 "application/pdf" => await ExtractFromPdfAsync(file),
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => await ExtractFromDocxAsync(file),
+                "application/msword" => await ExtractFromDocAsync(file), // Legacy Word format (.doc)
                 _ => throw new NotSupportedException($"File type {file.ContentType} is not supported")
             };
         }
@@ -161,6 +162,45 @@ public class DocumentProcessingService : IDocumentProcessingService
         }
 
         return content.ToString();
+    }
+
+    /// <summary>
+    /// Extract text from legacy Word document (.doc format)
+    /// </summary>
+    private async Task<string> ExtractFromDocAsync(IFormFile file)
+    {
+        _logger.LogInformation("Attempting to extract text from legacy Word document: {FileName}", file.FileName);
+        
+        try
+        {
+            // Try to read as if it's actually a newer format (some .doc files are actually .docx)
+            return await ExtractFromDocxAsync(file);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not read {FileName} as modern Word format, attempting alternative extraction", file.FileName);
+            
+            // For now, return a message indicating the limitation
+            // In a production environment, you might want to:
+            // 1. Use a library like Aspose.Words
+            // 2. Convert using LibreOffice/OpenOffice headless
+            // 3. Use a cloud service for conversion
+            
+            var content = new StringBuilder();
+            content.AppendLine($"# Document: {file.FileName}");
+            content.AppendLine();
+            content.AppendLine("**Note**: This is a legacy Word document (.doc format).");
+            content.AppendLine("The system currently supports modern Word documents (.docx), PDF files, and plain text files.");
+            content.AppendLine();
+            content.AppendLine("To process this document, please:");
+            content.AppendLine("1. Open the document in Microsoft Word");
+            content.AppendLine("2. Save it as a .docx file (Word Document format)");
+            content.AppendLine("3. Upload the converted .docx file");
+            content.AppendLine();
+            content.AppendLine("Alternative: Save the document as a .txt file to preserve the text content.");
+            
+            return content.ToString();
+        }
     }
 
     private List<string> SplitByHeaders(string content)
