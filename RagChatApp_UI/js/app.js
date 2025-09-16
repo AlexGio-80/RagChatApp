@@ -351,7 +351,7 @@ async function sendMessage() {
         }
 
         const result = await response.json();
-        addMessageToChat(result.response, 'bot', result.sources);
+        addMessageToChat(result.response, 'bot', result.sources, message);
         updateStatus('Response generated');
 
     } catch (error) {
@@ -364,7 +364,7 @@ async function sendMessage() {
     }
 }
 
-function addMessageToChat(content, sender, sources = []) {
+function addMessageToChat(content, sender, sources = [], searchQuery = '') {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${sender}-message`;
 
@@ -373,25 +373,44 @@ function addMessageToChat(content, sender, sources = []) {
         sourcesHtml = `
             <div class="message-sources">
                 <strong>📚 Sources:</strong>
-                ${sources.map(source => `
-                    <div class="source-item">
-                        <div class="source-header">
-                            ${escapeHtml(source.documentName)}
-                            ${source.headerContext ? `• ${escapeHtml(source.headerContext)}` : ''}
-                            (Score: ${source.similarityScore.toFixed(2)})
+                ${sources.map((source, index) => {
+                    const sourceContent = escapeHtml(source.content);
+                    const highlightedContent = highlightSearchTerms(sourceContent, searchQuery);
+                    const isLong = source.content.length > 300;
+
+                    return `
+                        <div class="source-item">
+                            <div class="source-header">
+                                <strong>${escapeHtml(source.documentName)}</strong>
+                                ${source.headerContext ? `• ${escapeHtml(source.headerContext)}` : ''}
+                                <span class="source-score">(Score: ${source.similarityScore.toFixed(2)})</span>
+                            </div>
+                            <div class="source-content ${isLong ? 'collapsible' : ''}" data-source-index="${index}">
+                                <div class="content-text">
+                                    "${highlightedContent}"
+                                </div>
+                                ${isLong ? `
+                                    <button class="expand-btn" onclick="toggleSourceContent(${index})" title="Espandi/Comprimi contenuto">
+                                        <span class="expand-text">Mostra tutto</span>
+                                        <span class="collapse-text" style="display: none;">Comprimi</span>
+                                    </button>
+                                ` : ''}
+                            </div>
                         </div>
-                        <div class="source-content">
-                            "${escapeHtml(source.content.substring(0, 200))}${source.content.length > 200 ? '...' : ''}"
-                        </div>
-                    </div>
-                `).join('')}
+                    `;
+                }).join('')}
             </div>
         `;
     }
 
+    // Highlight search terms in main response as well
+    const highlightedMainContent = sender === 'bot' && searchQuery
+        ? highlightSearchTerms(escapeHtml(content), searchQuery)
+        : escapeHtml(content);
+
     messageDiv.innerHTML = `
         <div class="message-content">
-            <p>${escapeHtml(content).replace(/\n/g, '<br>')}</p>
+            <p>${highlightedMainContent.replace(/\n/g, '<br>')}</p>
             ${sourcesHtml}
         </div>
     `;
@@ -470,6 +489,45 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function highlightSearchTerms(text, searchQuery) {
+    if (!searchQuery || searchQuery.trim().length === 0) {
+        return text;
+    }
+
+    // Extract words from search query (remove common words and punctuation)
+    const searchTerms = searchQuery
+        .toLowerCase()
+        .split(/[^\w]+/)
+        .filter(term => term.length > 2) // Only highlight words longer than 2 chars
+        .filter(term => !['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'should', 'could', 'can', 'may', 'might'].includes(term));
+
+    let highlightedText = text;
+
+    // Highlight each search term (case insensitive)
+    searchTerms.forEach(term => {
+        const regex = new RegExp(`(${term})`, 'gi');
+        highlightedText = highlightedText.replace(regex, '<mark class="search-highlight">$1</mark>');
+    });
+
+    return highlightedText;
+}
+
+function toggleSourceContent(index) {
+    const sourceContent = document.querySelector(`[data-source-index="${index}"]`);
+    const expandText = sourceContent.querySelector('.expand-text');
+    const collapseText = sourceContent.querySelector('.collapse-text');
+
+    if (sourceContent.classList.contains('expanded')) {
+        sourceContent.classList.remove('expanded');
+        expandText.style.display = 'inline';
+        collapseText.style.display = 'none';
+    } else {
+        sourceContent.classList.add('expanded');
+        expandText.style.display = 'none';
+        collapseText.style.display = 'inline';
+    }
 }
 
 // Global error handler

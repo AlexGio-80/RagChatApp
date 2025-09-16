@@ -307,3 +307,26 @@ MigrationBackup/
 
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
+
+# Serena
+.serena/
+
+# User-specific files
+*.user
+*.userosscache
+*.sln.docstates
+
+# Node.js Frontend Dependencies
+RagChatApp_UI/node_modules/
+
+# But track package-lock.json for reproducible builds
+!RagChatApp_UI/package-lock.json
+
+# Test files (keep for documentation but don't commit to main)
+test-*.txt
+
+# Claude Code settings (local only)
+.claude/settings.local.json
+
+# But do track solution files
+!*.sln
