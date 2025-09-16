@@ -123,6 +123,8 @@ public class AzureOpenAIService : IAzureOpenAIService
             .Include(c => c.Document)
             .Where(c => c.Content.Contains(query) ||
                        (c.HeaderContext != null && c.HeaderContext.Contains(query)))
+            .OrderBy(c => c.DocumentId)  // First order by document
+            .ThenBy(c => c.ChunkIndex)   // Then by chunk order within document
             .Take(maxResults)
             .Select(c => new ChatSource
             {
@@ -229,6 +231,8 @@ public class AzureOpenAIService : IAzureOpenAIService
             .Include(c => c.Document)
             .Where(c => c.Content.ToLower().Contains(query.ToLower()) ||
                        (c.HeaderContext != null && c.HeaderContext.ToLower().Contains(query.ToLower())))
+            .OrderBy(c => c.DocumentId)  // First order by document
+            .ThenBy(c => c.ChunkIndex)   // Then by chunk order within document
             .Take(maxResults)
             .Select(c => new ChatSource
             {
