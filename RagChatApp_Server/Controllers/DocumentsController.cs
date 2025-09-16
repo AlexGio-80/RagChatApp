@@ -18,17 +18,20 @@ public class DocumentsController : ControllerBase
     private readonly RagChatDbContext _context;
     private readonly IDocumentProcessingService _documentService;
     private readonly IAzureOpenAIService _aiService;
+    private readonly IServiceProvider _serviceProvider;
 
     public DocumentsController(
         ILogger<DocumentsController> logger,
         RagChatDbContext context,
         IDocumentProcessingService documentService,
-        IAzureOpenAIService aiService)
+        IAzureOpenAIService aiService,
+        IServiceProvider serviceProvider)
     {
         _logger = logger;
         _context = context;
         _documentService = documentService;
         _aiService = aiService;
+        _serviceProvider = serviceProvider;
     }
 
     /// <summary>
@@ -308,49 +311,63 @@ public class DocumentsController : ControllerBase
     /// </summary>
     private async Task ProcessDocumentAsync(int documentId)
     {
+        // Create a new scope for background processing to avoid disposed context issues
+        using var scope = _serviceProvider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<RagChatDbContext>();
+        var documentService = scope.ServiceProvider.GetRequiredService<IDocumentProcessingService>();
+        var aiService = scope.ServiceProvider.GetRequiredService<IAzureOpenAIService>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<DocumentsController>>();
+
         try
         {
-            _logger.LogInformation("Starting background processing for document: {DocumentId}", documentId);
+            logger.LogInformation("Starting background processing for document: {DocumentId}", documentId);
 
-            var document = await _context.Documents.FindAsync(documentId);
+            var document = await context.Documents.FindAsync(documentId);
             if (document == null)
             {
-                _logger.LogWarning("Document not found for processing: {DocumentId}", documentId);
+                logger.LogWarning("Document not found for processing: {DocumentId}", documentId);
                 return;
             }
 
             // Create chunks
-            var chunks = await _documentService.CreateChunksAsync(document.Content);
+            var chunks = await documentService.CreateChunksAsync(document.Content);
 
             // Generate embeddings for each chunk
             foreach (var chunk in chunks)
             {
                 chunk.DocumentId = documentId;
-                chunk.Embedding = await _aiService.GenerateEmbeddingsAsync(chunk.Content);
+                chunk.Embedding = await aiService.GenerateEmbeddingsAsync(chunk.Content);
             }
 
             // Save chunks to database
-            _context.DocumentChunks.AddRange(chunks);
+            context.DocumentChunks.AddRange(chunks);
 
             // Update document status
             document.Status = "Completed";
             document.ProcessedAt = DateTime.UtcNow;
 
-            await _context.SaveChangesAsync();
+            await context.SaveChangesAsync();
 
-            _logger.LogInformation("Completed processing for document: {DocumentId}, Chunks: {ChunkCount}",
+            logger.LogInformation("Completed processing for document: {DocumentId}, Chunks: {ChunkCount}",
                 documentId, chunks.Count);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing document: {DocumentId}", documentId);
+            logger.LogError(ex, "Error processing document: {DocumentId}", documentId);
 
-            // Update document status to failed
-            var document = await _context.Documents.FindAsync(documentId);
-            if (document != null)
+            // Update document status to failed using a separate context operation
+            try
             {
-                document.Status = "Failed";
-                await _context.SaveChangesAsync();
+                var document = await context.Documents.FindAsync(documentId);
+                if (document != null)
+                {
+                    document.Status = "Failed";
+                    await context.SaveChangesAsync();
+                }
+            }
+            catch (Exception saveEx)
+            {
+                logger.LogError(saveEx, "Failed to update document status to Failed for document: {DocumentId}", documentId);
             }
         }
     }
