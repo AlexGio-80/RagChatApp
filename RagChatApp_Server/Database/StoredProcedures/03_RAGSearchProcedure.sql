@@ -37,23 +37,19 @@ BEGIN
             WHERE SearchQuery = @SearchQuery
             ORDER BY CreatedAt DESC;
 
-            -- If cached result found, return it as JSON
+            -- If cached result found, return it as columns
             IF @CachedResult IS NOT NULL
             BEGIN
-                DECLARE @CachedJson NVARCHAR(MAX) =
-                    N'[{' +
-                        N'"Id": 0,' +
-                        N'"HeaderContext": null,' +
-                        N'"Content": ' + STRING_ESCAPE(@CachedResult, 'json') + ',' +
-                        N'"Notes": null,' +
-                        N'"Details": null,' +
-                        N'"SimilarityScore": 100.0,' +
-                        N'"FileName": "Cached Result",' +
-                        N'"FilePath": null,' +
-                        N'"Source": "SemanticCache"' +
-                    N'}]';
-
-                SELECT @CachedJson as SearchResults;
+                SELECT
+                    0 as Id,
+                    NULL as HeaderContext,
+                    @CachedResult as Content,
+                    NULL as Notes,
+                    NULL as Details,
+                    100.0 as SimilarityScore,
+                    'Cached Result' as FileName,
+                    NULL as FilePath,
+                    'SemanticCache' as Source;
                 RETURN;
             END
         END
@@ -125,38 +121,33 @@ BEGIN
             VALUES (@SearchQuery, @BestContent, @QueryEmbedding, GETUTCDATE());
         END
 
-        -- Return results as JSON
-        DECLARE @JsonResult NVARCHAR(MAX);
-
-        SELECT @JsonResult = (
-            SELECT
-                Id,
-                HeaderContext,
-                Content,
-                Notes,
-                Details,
-                SimilarityScore,
-                FileName,
-                FilePath
-            FROM @SearchResults
-            ORDER BY SimilarityScore DESC
-            FOR JSON AUTO
-        );
-
-        -- Handle empty results
-        IF @JsonResult IS NULL
-            SET @JsonResult = N'[]';
-
-        SELECT @JsonResult as SearchResults;
+        -- Return results as columns (direct SELECT)
+        SELECT
+            Id,
+            HeaderContext,
+            Content,
+            Notes,
+            Details,
+            SimilarityScore,
+            FileName,
+            FilePath,
+            'VectorSearch' as Source
+        FROM @SearchResults
+        ORDER BY SimilarityScore DESC;
 
     END TRY
     BEGIN CATCH
-        -- Return error as JSON
-        DECLARE @ErrorJson NVARCHAR(MAX) =
-            N'{"Error": "' + ERROR_MESSAGE() + '", "ErrorNumber": ' +
-            CAST(ERROR_NUMBER() AS NVARCHAR) + '}';
-
-        SELECT @ErrorJson as SearchResults;
+        -- Return error as columns
+        SELECT
+            -1 as Id,
+            NULL as HeaderContext,
+            'Error: ' + ERROR_MESSAGE() as Content,
+            NULL as Notes,
+            NULL as Details,
+            0.0 as SimilarityScore,
+            'Error' as FileName,
+            NULL as FilePath,
+            'Error' as Source;
     END CATCH
 END
 GO
@@ -200,20 +191,16 @@ BEGIN
 
             IF @CachedResult IS NOT NULL
             BEGIN
-                DECLARE @CachedJson NVARCHAR(MAX) =
-                    N'[{' +
-                        N'"Id": 0,' +
-                        N'"HeaderContext": null,' +
-                        N'"Content": ' + STRING_ESCAPE(@CachedResult, 'json') + ',' +
-                        N'"Notes": null,' +
-                        N'"Details": null,' +
-                        N'"SimilarityScore": 100.0,' +
-                        N'"FileName": "Cached Result",' +
-                        N'"FilePath": null,' +
-                        N'"Source": "SemanticCache"' +
-                    N'}]';
-
-                SELECT @CachedJson as SearchResults;
+                SELECT
+                    0 as Id,
+                    NULL as HeaderContext,
+                    @CachedResult as Content,
+                    NULL as Notes,
+                    NULL as Details,
+                    100.0 as SimilarityScore,
+                    'Cached Result' as FileName,
+                    NULL as FilePath,
+                    'SemanticCache' as Source;
                 RETURN;
             END
         END

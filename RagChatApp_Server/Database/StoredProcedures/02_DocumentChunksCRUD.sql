@@ -16,10 +16,9 @@ CREATE PROCEDURE [dbo].[SP_InsertDocumentChunk]
     @HeaderContext NVARCHAR(MAX) = NULL,
     @Notes NVARCHAR(MAX) = NULL,
     @Details NVARCHAR(MAX) = NULL,
-    @ContentEmbedding VARBINARY(MAX) = NULL,
-    @HeaderContextEmbedding VARBINARY(MAX) = NULL,
-    @NotesEmbedding VARBINARY(MAX) = NULL,
-    @DetailsEmbedding VARBINARY(MAX) = NULL,
+    @ApiKey NVARCHAR(255) = NULL,
+    @EmbeddingModel NVARCHAR(100) = 'text-embedding-3-small',
+    @AutoGenerateEmbeddings BIT = 1,
     @ChunkId INT OUTPUT
 AS
 BEGIN
@@ -60,65 +59,14 @@ BEGIN
 
         SET @ChunkId = SCOPE_IDENTITY();
 
-        -- Insert embeddings if provided
-        IF @ContentEmbedding IS NOT NULL
+        -- Auto-generate embeddings if requested (default)
+        IF @AutoGenerateEmbeddings = 1
         BEGIN
-            INSERT INTO DocumentChunkContentEmbeddings (
-                DocumentChunkId,
-                Embedding,
-                CreatedAt,
-                UpdatedAt
-            ) VALUES (
-                @ChunkId,
-                @ContentEmbedding,
-                GETUTCDATE(),
-                GETUTCDATE()
-            );
-        END
-
-        IF @HeaderContextEmbedding IS NOT NULL AND @HeaderContext IS NOT NULL
-        BEGIN
-            INSERT INTO DocumentChunkHeaderContextEmbeddings (
-                DocumentChunkId,
-                Embedding,
-                CreatedAt,
-                UpdatedAt
-            ) VALUES (
-                @ChunkId,
-                @HeaderContextEmbedding,
-                GETUTCDATE(),
-                GETUTCDATE()
-            );
-        END
-
-        IF @NotesEmbedding IS NOT NULL AND @Notes IS NOT NULL
-        BEGIN
-            INSERT INTO DocumentChunkNotesEmbeddings (
-                DocumentChunkId,
-                Embedding,
-                CreatedAt,
-                UpdatedAt
-            ) VALUES (
-                @ChunkId,
-                @NotesEmbedding,
-                GETUTCDATE(),
-                GETUTCDATE()
-            );
-        END
-
-        IF @DetailsEmbedding IS NOT NULL AND @Details IS NOT NULL
-        BEGIN
-            INSERT INTO DocumentChunkDetailsEmbeddings (
-                DocumentChunkId,
-                Embedding,
-                CreatedAt,
-                UpdatedAt
-            ) VALUES (
-                @ChunkId,
-                @DetailsEmbedding,
-                GETUTCDATE(),
-                GETUTCDATE()
-            );
+            -- Generate all embeddings for this chunk using OpenAI API
+            EXEC SP_GenerateAllEmbeddingsForChunk
+                @ChunkId = @ChunkId,
+                @ApiKey = @ApiKey,
+                @EmbeddingModel = @EmbeddingModel;
         END
 
         COMMIT TRANSACTION;
@@ -234,11 +182,9 @@ CREATE PROCEDURE [dbo].[SP_UpdateDocumentChunk]
     @HeaderContext NVARCHAR(MAX) = NULL,
     @Notes NVARCHAR(MAX) = NULL,
     @Details NVARCHAR(MAX) = NULL,
-    @ContentEmbedding VARBINARY(MAX) = NULL,
-    @HeaderContextEmbedding VARBINARY(MAX) = NULL,
-    @NotesEmbedding VARBINARY(MAX) = NULL,
-    @DetailsEmbedding VARBINARY(MAX) = NULL,
-    @UpdateEmbeddings BIT = 0
+    @ApiKey NVARCHAR(255) = NULL,
+    @EmbeddingModel NVARCHAR(100) = 'text-embedding-3-small',
+    @AutoGenerateEmbeddings BIT = 1
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -264,56 +210,14 @@ BEGIN
             UpdatedAt = GETUTCDATE()
         WHERE Id = @ChunkId;
 
-        -- Update embeddings if requested
-        IF @UpdateEmbeddings = 1
+        -- Auto-regenerate embeddings if requested (default)
+        IF @AutoGenerateEmbeddings = 1
         BEGIN
-            -- Update or insert content embedding
-            IF @ContentEmbedding IS NOT NULL
-            BEGIN
-                IF EXISTS (SELECT 1 FROM DocumentChunkContentEmbeddings WHERE DocumentChunkId = @ChunkId)
-                    UPDATE DocumentChunkContentEmbeddings
-                    SET Embedding = @ContentEmbedding, UpdatedAt = GETUTCDATE()
-                    WHERE DocumentChunkId = @ChunkId;
-                ELSE
-                    INSERT INTO DocumentChunkContentEmbeddings (DocumentChunkId, Embedding, CreatedAt, UpdatedAt)
-                    VALUES (@ChunkId, @ContentEmbedding, GETUTCDATE(), GETUTCDATE());
-            END
-
-            -- Update or insert header context embedding
-            IF @HeaderContextEmbedding IS NOT NULL
-            BEGIN
-                IF EXISTS (SELECT 1 FROM DocumentChunkHeaderContextEmbeddings WHERE DocumentChunkId = @ChunkId)
-                    UPDATE DocumentChunkHeaderContextEmbeddings
-                    SET Embedding = @HeaderContextEmbedding, UpdatedAt = GETUTCDATE()
-                    WHERE DocumentChunkId = @ChunkId;
-                ELSE
-                    INSERT INTO DocumentChunkHeaderContextEmbeddings (DocumentChunkId, Embedding, CreatedAt, UpdatedAt)
-                    VALUES (@ChunkId, @HeaderContextEmbedding, GETUTCDATE(), GETUTCDATE());
-            END
-
-            -- Update or insert notes embedding
-            IF @NotesEmbedding IS NOT NULL
-            BEGIN
-                IF EXISTS (SELECT 1 FROM DocumentChunkNotesEmbeddings WHERE DocumentChunkId = @ChunkId)
-                    UPDATE DocumentChunkNotesEmbeddings
-                    SET Embedding = @NotesEmbedding, UpdatedAt = GETUTCDATE()
-                    WHERE DocumentChunkId = @ChunkId;
-                ELSE
-                    INSERT INTO DocumentChunkNotesEmbeddings (DocumentChunkId, Embedding, CreatedAt, UpdatedAt)
-                    VALUES (@ChunkId, @NotesEmbedding, GETUTCDATE(), GETUTCDATE());
-            END
-
-            -- Update or insert details embedding
-            IF @DetailsEmbedding IS NOT NULL
-            BEGIN
-                IF EXISTS (SELECT 1 FROM DocumentChunkDetailsEmbeddings WHERE DocumentChunkId = @ChunkId)
-                    UPDATE DocumentChunkDetailsEmbeddings
-                    SET Embedding = @DetailsEmbedding, UpdatedAt = GETUTCDATE()
-                    WHERE DocumentChunkId = @ChunkId;
-                ELSE
-                    INSERT INTO DocumentChunkDetailsEmbeddings (DocumentChunkId, Embedding, CreatedAt, UpdatedAt)
-                    VALUES (@ChunkId, @DetailsEmbedding, GETUTCDATE(), GETUTCDATE());
-            END
+            -- Regenerate all embeddings for this chunk using OpenAI API
+            EXEC SP_GenerateAllEmbeddingsForChunk
+                @ChunkId = @ChunkId,
+                @ApiKey = @ApiKey,
+                @EmbeddingModel = @EmbeddingModel;
         END
 
         COMMIT TRANSACTION;

@@ -73,6 +73,11 @@ PRINT '4. Installing Semantic Cache Management stored procedures...'
 :r "04_SemanticCacheManagement.sql"
 PRINT ''
 
+-- Install OpenAI Embedding Integration procedures
+PRINT '5. Installing OpenAI Embedding Integration stored procedures...'
+:r "05_OpenAIEmbeddingIntegration.sql"
+PRINT ''
+
 PRINT '============================================='
 PRINT 'Verifying installed procedures...'
 
@@ -85,7 +90,8 @@ FROM INFORMATION_SCHEMA.ROUTINES
 WHERE ROUTINE_TYPE = 'PROCEDURE'
   AND (ROUTINE_NAME LIKE 'SP_%Document%' OR
        ROUTINE_NAME LIKE 'SP_RAG%' OR
-       ROUTINE_NAME LIKE 'SP_%Semantic%')
+       ROUTINE_NAME LIKE 'SP_%Semantic%' OR
+       ROUTINE_NAME LIKE 'SP_Generate%')
 ORDER BY ROUTINE_NAME;
 
 DECLARE @ProcedureCount INT;
@@ -94,7 +100,8 @@ FROM INFORMATION_SCHEMA.ROUTINES
 WHERE ROUTINE_TYPE = 'PROCEDURE'
   AND (ROUTINE_NAME LIKE 'SP_%Document%' OR
        ROUTINE_NAME LIKE 'SP_RAG%' OR
-       ROUTINE_NAME LIKE 'SP_%Semantic%');
+       ROUTINE_NAME LIKE 'SP_%Semantic%' OR
+       ROUTINE_NAME LIKE 'SP_Generate%');
 
 PRINT ''
 PRINT 'Installation completed successfully!'

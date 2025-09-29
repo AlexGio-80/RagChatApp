@@ -8,9 +8,10 @@ This directory contains SQL Server stored procedures that provide a complete SQL
 |------|-------------|
 | `00_InstallAllStoredProcedures.sql` | Master installation script |
 | `01_DocumentsCRUD.sql` | Documents CRUD operations |
-| `02_DocumentChunksCRUD.sql` | DocumentChunks and Embeddings CRUD |
-| `03_RAGSearchProcedure.sql` | RAG search with JSON response |
+| `02_DocumentChunksCRUD.sql` | DocumentChunks and Embeddings CRUD with auto-generation |
+| `03_RAGSearchProcedure.sql` | RAG search with column response |
 | `04_SemanticCacheManagement.sql` | Semantic cache management |
+| `05_OpenAIEmbeddingIntegration.sql` | OpenAI API embedding generation via REST |
 
 ## 🚀 Installation
 
@@ -76,10 +77,11 @@ EXEC SP_DeleteDocument @DocumentId = 1;
 
 ### DocumentChunks and Embeddings CRUD
 
-#### `SP_InsertDocumentChunk`
-Create a document chunk with embeddings.
+#### `SP_InsertDocumentChunk` (ENHANCED)
+Create a document chunk with automatic embedding generation via OpenAI API.
 ```sql
 DECLARE @ChunkId INT;
+-- Auto-generate embeddings (default behavior)
 EXEC SP_InsertDocumentChunk
     @DocumentId = 1,
     @ChunkIndex = 0,
@@ -87,8 +89,17 @@ EXEC SP_InsertDocumentChunk
     @HeaderContext = 'Introduction',
     @Notes = 'Important section',
     @Details = '{"author": "John Doe", "tags": ["AI", "ML"]}',
-    @ContentEmbedding = 0x1234...., -- Binary embedding data
-    @HeaderContextEmbedding = 0x5678....,
+    @ApiKey = 'your-openai-api-key', -- Optional, will use mock if not provided
+    @EmbeddingModel = 'text-embedding-3-small', -- Optional, default model
+    @AutoGenerateEmbeddings = 1, -- Optional, default is 1 (true)
+    @ChunkId = @ChunkId OUTPUT;
+
+-- Skip embedding generation for manual control
+EXEC SP_InsertDocumentChunk
+    @DocumentId = 1,
+    @ChunkIndex = 0,
+    @Content = 'Content without embeddings...',
+    @AutoGenerateEmbeddings = 0, -- Skip automatic embedding generation
     @ChunkId = @ChunkId OUTPUT;
 ```
 
@@ -102,14 +113,22 @@ EXEC SP_GetDocumentChunks @DocumentId = 1, @IncludeEmbeddings = 0;
 EXEC SP_GetDocumentChunks @DocumentId = 1, @IncludeEmbeddings = 1;
 ```
 
-#### `SP_UpdateDocumentChunk`
-Update chunk content and/or embeddings.
+#### `SP_UpdateDocumentChunk` (ENHANCED)
+Update chunk content with automatic embedding regeneration.
 ```sql
+-- Auto-regenerate embeddings after content update (default)
 EXEC SP_UpdateDocumentChunk
     @ChunkId = 1,
     @Content = 'Updated chunk content',
-    @ContentEmbedding = 0x9ABC....,
-    @UpdateEmbeddings = 1;
+    @Notes = 'Updated notes',
+    @ApiKey = 'your-openai-api-key', -- Optional
+    @AutoGenerateEmbeddings = 1; -- Default behavior
+
+-- Update content without regenerating embeddings
+EXEC SP_UpdateDocumentChunk
+    @ChunkId = 1,
+    @Content = 'Updated content',
+    @AutoGenerateEmbeddings = 0; -- Skip embedding regeneration
 ```
 
 #### `SP_DeleteDocumentChunk`
@@ -120,8 +139,8 @@ EXEC SP_DeleteDocumentChunk @ChunkId = 1;
 
 ### RAG Search Operations
 
-#### `SP_RAGSearch`
-Perform multi-field vector search with JSON response.
+#### `SP_RAGSearch` (ENHANCED)
+Perform multi-field vector search with column-based results.
 ```sql
 -- Search with query embedding
 DECLARE @QueryEmbedding VARBINARY(MAX) = 0x1234....; -- Your query embedding
@@ -132,21 +151,14 @@ EXEC SP_RAGSearch
     @SearchQuery = 'machine learning algorithms';
 ```
 
-**JSON Response Format**:
-```json
-[
-  {
-    "Id": 1,
-    "HeaderContext": "Machine Learning Basics",
-    "Content": "Machine learning is a subset of AI...",
-    "Notes": "Key concepts covered",
-    "Details": "{\"topic\": \"AI\", \"level\": \"beginner\"}",
-    "SimilarityScore": 85.5,
-    "FileName": "ml_guide.pdf",
-    "FilePath": "/documents/ml_guide.pdf"
-  }
-]
+**Column Response Format** (instead of JSON):
 ```
+Id | HeaderContext | Content | Notes | Details | SimilarityScore | FileName | FilePath | Source
+1  | Machine Learning Basics | Machine learning is... | Key concepts | {"topic":"AI"} | 85.5 | ml_guide.pdf | /docs/ml_guide.pdf | VectorSearch
+0  | NULL | Cached result... | NULL | NULL | 100.0 | Cached Result | NULL | SemanticCache
+```
+
+This change makes it easier to consume results from external applications and provides better performance.
 
 #### `SP_RAGSearchWithVectorDistance`
 Advanced search using actual vector distance functions (if supported by SQL Server).
@@ -212,6 +224,41 @@ EXEC SP_DeleteFromSemanticCache @CacheId = 5;
 EXEC SP_DeleteFromSemanticCache @DeleteAll = 1;
 ```
 
+### OpenAI Embedding Integration (NEW)
+
+#### `SP_GenerateEmbedding`
+Generate a single embedding via OpenAI API using `sp_invoke_external_rest_endpoint`.
+```sql
+DECLARE @EmbeddingResult VARBINARY(MAX);
+EXEC SP_GenerateEmbedding
+    @Text = 'Text to generate embedding for',
+    @ApiKey = 'your-openai-api-key',
+    @EmbeddingModel = 'text-embedding-3-small', -- Optional, default model
+    @Embedding = @EmbeddingResult OUTPUT;
+
+SELECT @EmbeddingResult as GeneratedEmbedding;
+```
+
+#### `SP_GenerateAllEmbeddingsForChunk`
+Generate all embeddings for a document chunk (Content, HeaderContext, Notes, Details).
+```sql
+-- Generate embeddings for all available fields in chunk
+EXEC SP_GenerateAllEmbeddingsForChunk
+    @ChunkId = 1,
+    @ApiKey = 'your-openai-api-key', -- Optional, uses mock if not provided
+    @EmbeddingModel = 'text-embedding-3-small'; -- Optional
+
+-- For development/testing without API key (uses deterministic mock embeddings)
+EXEC SP_GenerateAllEmbeddingsForChunk @ChunkId = 1;
+```
+
+**Features:**
+- **Automatic API Integration**: Calls OpenAI API directly from SQL using `sp_invoke_external_rest_endpoint`
+- **Fallback to Mock**: If API call fails or no API key provided, generates deterministic mock embeddings
+- **Multi-Field Support**: Generates embeddings for all available text fields
+- **Error Handling**: Comprehensive error management with fallback strategies
+- **Base64 Decoding**: Handles OpenAI's base64-encoded embedding responses
+
 ## 🔧 Configuration and Features
 
 ### Configurable Parameters
@@ -223,10 +270,12 @@ EXEC SP_DeleteFromSemanticCache @DeleteAll = 1;
 ### Key Features Implemented
 ✅ **Multi-field embedding search** using LEAST function logic
 ✅ **Semantic caching** with 1-hour TTL
-✅ **JSON response format** for RAG search results
+✅ **Column-based response format** for RAG search results (enhanced from JSON)
+✅ **Automatic embedding generation** via OpenAI API integration
 ✅ **Cascade deletion** for data integrity
-✅ **Error handling** with transaction rollback
+✅ **Error handling** with transaction rollback and fallback strategies
 ✅ **Performance optimization** with proper indexing support
+✅ **Mock mode support** for development without API keys
 
 ### Vector Distance Support
 The procedures are designed to work with SQL Server's vector functions when available:
@@ -271,25 +320,39 @@ All procedures include comprehensive error handling:
 ## 🧪 Testing Examples
 
 ```sql
--- Complete workflow test
+-- Complete workflow test with automatic embedding generation
 DECLARE @DocId INT, @ChunkId INT;
 
 -- 1. Insert document
 EXEC SP_InsertDocument 'test.txt', 'text/plain', 100, 'Test content', NULL, 'Pending', @DocId OUTPUT;
 
--- 2. Add chunk with embeddings
-EXEC SP_InsertDocumentChunk @DocId, 0, 'Test chunk', NULL, NULL, NULL, 0x1234, NULL, NULL, NULL, @ChunkId OUTPUT;
+-- 2. Add chunk with automatic embedding generation
+EXEC SP_InsertDocumentChunk
+    @DocumentId = @DocId,
+    @ChunkIndex = 0,
+    @Content = 'Test chunk content',
+    @HeaderContext = 'Test Header',
+    @Notes = 'Test notes',
+    @ApiKey = 'your-api-key-or-null-for-mock', -- NULL will use mock embeddings
+    @ChunkId = @ChunkId OUTPUT;
 
 -- 3. Update document status
 EXEC SP_UpdateDocument @DocId, @Status = 'Completed', @ProcessedAt = GETUTCDATE();
 
--- 4. Search for content
-EXEC SP_RAGSearch 0x1234, 5, 0.7, 'test query';
+-- 4. Generate query embedding and search
+DECLARE @QueryEmbedding VARBINARY(MAX);
+EXEC SP_GenerateEmbedding
+    @Text = 'test query',
+    @ApiKey = 'your-api-key-or-null',
+    @Embedding = @QueryEmbedding OUTPUT;
 
--- 5. Check cache
+-- 5. Search for content (now returns columns, not JSON)
+EXEC SP_RAGSearch @QueryEmbedding, 5, 0.7, 'test query';
+
+-- 6. Check cache statistics
 EXEC SP_GetSemanticCacheStats;
 
--- 6. Cleanup
+-- 7. Cleanup
 EXEC SP_DeleteDocument @DocId;
 ```
 
