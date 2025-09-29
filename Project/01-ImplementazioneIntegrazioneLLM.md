@@ -21,7 +21,7 @@ Alla creazione del progetto implementare il CLAUDE.md con il contenuto dei segue
 		-- Normalizza il testo: Rimuovi doppi spazi, interruzioni di riga non necessarie, ecc.
 		-- Applica una strategia di chunking:
 			--- Se puoi identificare la struttura (es. paragrafi, sezioni basate su pattern di testo), usala.
-			--- Altrimenti, dividi per dimensione fissa (es. 750 token / 1000 caratteri) con una sovrapposizione (es. 10-20%).
+			--- Altrimenti, dividi per dimensione fissa (es. 750 token / 3000 caratteri) con una sovrapposizione (es. 10-20%).
 		-- Il salvataggio degli HeaderContext andrà fatto solo se si riesce a individuare la struttura dei paragrafi e/o sezioni, altrimenti se ci si basa sulle dimensioni non salveremo l'Header (stesso ragionamento per i file di testo).
 	
 1. **Database SQL Server**

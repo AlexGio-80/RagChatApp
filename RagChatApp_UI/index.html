@@ -43,6 +43,58 @@
                                     <input type="file" id="fileInput" multiple accept=".txt,.pdf,.doc,.docx" hidden>
                                 </div>
                             </div>
+
+                            <!-- Metadata Form -->
+                            <div class="metadata-form" id="metadataForm" style="display: none;">
+                                <h4>📝 Informazioni Aggiuntive</h4>
+
+                                <!-- Notes Section -->
+                                <div class="form-group">
+                                    <label for="documentNotes">Note del Documento:</label>
+                                    <textarea id="documentNotes" placeholder="Aggiungi note descrittive sul contenuto del documento..." rows="3"></textarea>
+                                </div>
+
+                                <!-- Details Section -->
+                                <div class="form-group">
+                                    <label>🏷️ Tag Strutturati:</label>
+                                    <div class="details-form">
+                                        <div class="details-row">
+                                            <input type="text" id="detailAuthor" placeholder="Autore" />
+                                            <input type="text" id="detailType" placeholder="Tipo (es. code sample, documentation)" />
+                                        </div>
+                                        <div class="details-row">
+                                            <input type="text" id="detailLicense" placeholder="Licenza (es. MIT, Apache)" />
+                                            <input type="text" id="detailLanguages" placeholder="Linguaggi (es. .NET, Python)" />
+                                        </div>
+                                        <div class="details-row">
+                                            <input type="text" id="detailServices" placeholder="Servizi (es. Azure SQL, OpenAI)" />
+                                            <input type="text" id="detailTags" placeholder="Tag generici (separati da virgole)" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Custom JSON -->
+                                <div class="form-group">
+                                    <label for="customDetails">JSON Personalizzato (opzionale):</label>
+                                    <textarea id="customDetails" placeholder='{"custom_field": "value", "priority": 1}' rows="2"></textarea>
+                                    <div class="json-hint">💡 Puoi inserire JSON personalizzato che verrà unito con i tag strutturati</div>
+                                </div>
+
+                                <div class="metadata-actions">
+                                    <button id="uploadWithMetadata" class="btn btn-primary">
+                                        <span class="btn-icon">📤</span>
+                                        Carica con Metadati
+                                    </button>
+                                    <button id="skipMetadata" class="btn btn-secondary">
+                                        <span class="btn-icon">⏭️</span>
+                                        Carica Senza Metadati
+                                    </button>
+                                    <button id="cancelUpload" class="btn btn-danger">
+                                        <span class="btn-icon">❌</span>
+                                        Annulla
+                                    </button>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- Text Input -->
@@ -51,9 +103,32 @@
                             <div class="text-input-section">
                                 <input type="text" id="textTitle" placeholder="Titolo del documento" maxlength="255">
                                 <textarea id="textContent" placeholder="Incolla qui il testo da indicizzare..." rows="8"></textarea>
+
+                                <!-- Text Metadata -->
+                                <div class="text-metadata">
+                                    <div class="form-group">
+                                        <label for="textNotes">Note:</label>
+                                        <textarea id="textNotes" placeholder="Note descrittive per questo testo..." rows="2"></textarea>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label>Tag Rapidi:</label>
+                                        <div class="details-row">
+                                            <input type="text" id="textAuthor" placeholder="Autore" />
+                                            <input type="text" id="textType" placeholder="Tipo contenuto" />
+                                            <input type="text" id="textTags" placeholder="Tag (separati da virgole)" />
+                                        </div>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="textCustomDetails">JSON Aggiuntivo (opzionale):</label>
+                                        <textarea id="textCustomDetails" placeholder='{"source": "documentation", "version": "1.0"}' rows="1"></textarea>
+                                    </div>
+                                </div>
+
                                 <button id="indexTextBtn" class="btn btn-primary">
                                     <span class="btn-icon">🔍</span>
-                                    Indicizza Testo
+                                    Indicizza Testo con Metadati
                                 </button>
                             </div>
                         </div>

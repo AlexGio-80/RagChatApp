@@ -11,7 +11,9 @@ const AppState = {
     currentTab: 'documents',
     documents: [],
     isLoading: false,
-    chatMessages: []
+    chatMessages: [],
+    pendingFiles: [], // Files waiting for metadata input
+    isMetadataFormVisible: false
 };
 
 // DOM Elements
@@ -35,7 +37,26 @@ const elements = {
     similarityValue: document.getElementById('similarityValue'),
     statusText: document.getElementById('statusText'),
     modeIndicator: document.getElementById('modeIndicator'),
-    toastContainer: document.getElementById('toastContainer')
+    toastContainer: document.getElementById('toastContainer'),
+    // Metadata form elements
+    metadataForm: document.getElementById('metadataForm'),
+    documentNotes: document.getElementById('documentNotes'),
+    detailAuthor: document.getElementById('detailAuthor'),
+    detailType: document.getElementById('detailType'),
+    detailLicense: document.getElementById('detailLicense'),
+    detailLanguages: document.getElementById('detailLanguages'),
+    detailServices: document.getElementById('detailServices'),
+    detailTags: document.getElementById('detailTags'),
+    customDetails: document.getElementById('customDetails'),
+    uploadWithMetadata: document.getElementById('uploadWithMetadata'),
+    skipMetadata: document.getElementById('skipMetadata'),
+    cancelUpload: document.getElementById('cancelUpload'),
+    // Text metadata elements
+    textNotes: document.getElementById('textNotes'),
+    textAuthor: document.getElementById('textAuthor'),
+    textType: document.getElementById('textType'),
+    textTags: document.getElementById('textTags'),
+    textCustomDetails: document.getElementById('textCustomDetails')
 };
 
 // Initialize Application
@@ -81,6 +102,11 @@ function initializeEventListeners() {
     // Settings
     elements.maxChunks.addEventListener('input', updateRangeValues);
     elements.similarityThreshold.addEventListener('input', updateRangeValues);
+
+    // Metadata form events
+    elements.uploadWithMetadata.addEventListener('click', handleUploadWithMetadata);
+    elements.skipMetadata.addEventListener('click', handleSkipMetadata);
+    elements.cancelUpload.addEventListener('click', handleCancelUpload);
 }
 
 // Tab Management
@@ -124,11 +150,18 @@ function handleFileSelect(e) {
 }
 
 function processFiles(files) {
-    files.forEach(file => {
-        if (validateFile(file)) {
-            uploadFile(file);
-        }
-    });
+    const validFiles = files.filter(file => validateFile(file));
+
+    if (validFiles.length === 0) {
+        elements.fileInput.value = '';
+        return;
+    }
+
+    // Store files in pending state
+    AppState.pendingFiles = validFiles;
+
+    // Show metadata form
+    showMetadataForm();
 
     // Reset file input after processing to allow re-selection of the same files
     elements.fileInput.value = '';
@@ -151,9 +184,19 @@ function validateFile(file) {
     return true;
 }
 
-async function uploadFile(file) {
+async function uploadFile(file, metadata = null) {
     const formData = new FormData();
     formData.append('File', file);
+
+    // Add metadata if provided
+    if (metadata) {
+        if (metadata.notes) {
+            formData.append('Notes', metadata.notes);
+        }
+        if (metadata.details) {
+            formData.append('Details', JSON.stringify(metadata.details));
+        }
+    }
 
     try {
         updateStatus(`Uploading ${file.name}...`);
@@ -193,15 +236,28 @@ async function handleTextIndex() {
         elements.indexTextBtn.disabled = true;
         updateStatus('Indexing text...');
 
+        // Collect metadata
+        const metadata = collectTextMetadata();
+
+        const payload = {
+            title: title,
+            content: content
+        };
+
+        // Add metadata if provided
+        if (metadata.notes) {
+            payload.notes = metadata.notes;
+        }
+        if (metadata.details && Object.keys(metadata.details).length > 0) {
+            payload.details = JSON.stringify(metadata.details);
+        }
+
         const response = await fetch(`${CONFIG.API_BASE_URL}/documents/index-text`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                title: title,
-                content: content
-            })
+            body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
@@ -209,11 +265,10 @@ async function handleTextIndex() {
         }
 
         const result = await response.json();
-        showToast('Text indexed successfully!', 'success');
+        showToast('Text indexed successfully with metadata!', 'success');
 
         // Clear form
-        elements.textTitle.value = '';
-        elements.textContent.value = '';
+        clearTextForm();
 
         loadDocuments(); // Refresh document list
         updateStatus('Text indexed successfully');
@@ -528,6 +583,161 @@ function toggleSourceContent(index) {
         expandText.style.display = 'none';
         collapseText.style.display = 'inline';
     }
+}
+
+// Metadata Management Functions
+function showMetadataForm() {
+    AppState.isMetadataFormVisible = true;
+    elements.metadataForm.style.display = 'block';
+    elements.dropZone.style.display = 'none';
+}
+
+function hideMetadataForm() {
+    AppState.isMetadataFormVisible = false;
+    elements.metadataForm.style.display = 'none';
+    elements.dropZone.style.display = 'block';
+    clearMetadataForm();
+}
+
+function clearMetadataForm() {
+    elements.documentNotes.value = '';
+    elements.detailAuthor.value = '';
+    elements.detailType.value = '';
+    elements.detailLicense.value = '';
+    elements.detailLanguages.value = '';
+    elements.detailServices.value = '';
+    elements.detailTags.value = '';
+    elements.customDetails.value = '';
+}
+
+function clearTextForm() {
+    elements.textTitle.value = '';
+    elements.textContent.value = '';
+    elements.textNotes.value = '';
+    elements.textAuthor.value = '';
+    elements.textType.value = '';
+    elements.textTags.value = '';
+    elements.textCustomDetails.value = '';
+}
+
+function collectFileMetadata() {
+    const notes = elements.documentNotes.value.trim();
+    const details = {};
+
+    // Collect structured details
+    if (elements.detailAuthor.value.trim()) {
+        details.author = elements.detailAuthor.value.trim();
+    }
+    if (elements.detailType.value.trim()) {
+        details.type = elements.detailType.value.trim();
+    }
+    if (elements.detailLicense.value.trim()) {
+        details.license = elements.detailLicense.value.trim();
+    }
+    if (elements.detailLanguages.value.trim()) {
+        details.languages = elements.detailLanguages.value.split(',').map(s => s.trim()).filter(s => s);
+    }
+    if (elements.detailServices.value.trim()) {
+        details.services = elements.detailServices.value.split(',').map(s => s.trim()).filter(s => s);
+    }
+    if (elements.detailTags.value.trim()) {
+        details.tags = elements.detailTags.value.split(',').map(s => s.trim()).filter(s => s);
+    }
+
+    // Merge with custom JSON if provided
+    if (elements.customDetails.value.trim()) {
+        try {
+            const customJson = JSON.parse(elements.customDetails.value.trim());
+            Object.assign(details, customJson);
+        } catch (error) {
+            showToast('Invalid JSON in custom details. Using structured details only.', 'warning');
+        }
+    }
+
+    return { notes: notes || null, details: Object.keys(details).length > 0 ? details : null };
+}
+
+function collectTextMetadata() {
+    const notes = elements.textNotes.value.trim();
+    const details = {};
+
+    // Collect structured details for text
+    if (elements.textAuthor.value.trim()) {
+        details.author = elements.textAuthor.value.trim();
+    }
+    if (elements.textType.value.trim()) {
+        details.type = elements.textType.value.trim();
+    }
+    if (elements.textTags.value.trim()) {
+        details.tags = elements.textTags.value.split(',').map(s => s.trim()).filter(s => s);
+    }
+
+    // Merge with custom JSON if provided
+    if (elements.textCustomDetails.value.trim()) {
+        try {
+            const customJson = JSON.parse(elements.textCustomDetails.value.trim());
+            Object.assign(details, customJson);
+        } catch (error) {
+            showToast('Invalid JSON in custom details. Using structured details only.', 'warning');
+        }
+    }
+
+    return { notes: notes || null, details: Object.keys(details).length > 0 ? details : null };
+}
+
+// Metadata Form Event Handlers
+async function handleUploadWithMetadata() {
+    if (AppState.pendingFiles.length === 0) {
+        showToast('No files selected for upload.', 'warning');
+        return;
+    }
+
+    const metadata = collectFileMetadata();
+
+    // Upload all pending files with metadata
+    const uploadPromises = AppState.pendingFiles.map(file => uploadFile(file, metadata));
+
+    try {
+        elements.uploadWithMetadata.disabled = true;
+        const fileCount = AppState.pendingFiles.length;
+        await Promise.all(uploadPromises);
+        hideMetadataForm();
+        AppState.pendingFiles = [];
+        showToast(`Successfully uploaded ${fileCount} file(s) with metadata!`, 'success');
+    } catch (error) {
+        showToast('Some files failed to upload. Check the console for details.', 'error');
+    } finally {
+        elements.uploadWithMetadata.disabled = false;
+    }
+}
+
+async function handleSkipMetadata() {
+    if (AppState.pendingFiles.length === 0) {
+        showToast('No files selected for upload.', 'warning');
+        return;
+    }
+
+    // Upload files without metadata
+    const uploadPromises = AppState.pendingFiles.map(file => uploadFile(file));
+
+    try {
+        elements.skipMetadata.disabled = true;
+        const fileCount = AppState.pendingFiles.length;
+        await Promise.all(uploadPromises);
+        hideMetadataForm();
+        AppState.pendingFiles = [];
+        showToast(`Successfully uploaded ${fileCount} file(s) without metadata!`, 'success');
+    } catch (error) {
+        showToast('Some files failed to upload. Check the console for details.', 'error');
+    } finally {
+        elements.skipMetadata.disabled = false;
+    }
+}
+
+function handleCancelUpload() {
+    AppState.pendingFiles = [];
+    hideMetadataForm();
+    showToast('File upload cancelled.', 'info');
 }
 
 // Global error handler

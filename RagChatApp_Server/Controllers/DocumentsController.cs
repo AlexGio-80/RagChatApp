@@ -74,8 +74,8 @@ public class DocumentsController : ControllerBase
             _context.Documents.Add(document);
             await _context.SaveChangesAsync();
 
-            // Process document in background
-            _ = Task.Run(async () => await ProcessDocumentAsync(document.Id));
+            // Process document in background with metadata
+            _ = Task.Run(async () => await ProcessDocumentAsync(document.Id, request.Notes, request.Details));
 
             var response = new DocumentResponse
             {
@@ -128,8 +128,8 @@ public class DocumentsController : ControllerBase
             _context.Documents.Add(document);
             await _context.SaveChangesAsync();
 
-            // Process document in background
-            _ = Task.Run(async () => await ProcessDocumentAsync(document.Id));
+            // Process document in background with metadata
+            _ = Task.Run(async () => await ProcessDocumentAsync(document.Id, request.Notes, request.Details));
 
             var response = new DocumentResponse
             {
@@ -234,8 +234,8 @@ public class DocumentsController : ControllerBase
 
             await _context.SaveChangesAsync();
 
-            // Process document in background
-            _ = Task.Run(async () => await ProcessDocumentAsync(document.Id));
+            // Process document in background with metadata
+            _ = Task.Run(async () => await ProcessDocumentAsync(document.Id, request.Notes, request.Details));
 
             var response = new DocumentResponse
             {
@@ -309,7 +309,7 @@ public class DocumentsController : ControllerBase
     /// <summary>
     /// Background processing of document chunks and embeddings
     /// </summary>
-    private async Task ProcessDocumentAsync(int documentId)
+    private async Task ProcessDocumentAsync(int documentId, string? notes = null, string? details = null)
     {
         // Create a new scope for background processing to avoid disposed context issues
         using var scope = _serviceProvider.CreateScope();
@@ -329,8 +329,8 @@ public class DocumentsController : ControllerBase
                 return;
             }
 
-            // Create chunks with enhanced chunking logic
-            var chunks = await documentService.CreateChunksAsync(document.Content, 1000, null, null, document.FileName);
+            // Create chunks with enhanced chunking logic and metadata
+            var chunks = await documentService.CreateChunksAsync(document.Content, 1000, notes, details, document.FileName);
 
             // Generate embeddings for each chunk and save to database
             foreach (var chunk in chunks)

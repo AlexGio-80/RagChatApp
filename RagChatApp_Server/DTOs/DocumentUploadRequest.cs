@@ -12,6 +12,17 @@ public class DocumentUploadRequest
     /// </summary>
     [Required]
     public IFormFile File { get; set; } = null!;
+
+    /// <summary>
+    /// Optional notes about the document
+    /// </summary>
+    public string? Notes { get; set; }
+
+    /// <summary>
+    /// Optional structured metadata as JSON string
+    /// Examples: {"author": "John Doe", "tags": ["AI", "ML"], "license": "MIT"}
+    /// </summary>
+    public string? Details { get; set; }
 }
 
 /// <summary>
@@ -31,4 +42,15 @@ public class IndexTextRequest
     /// </summary>
     [Required]
     public string Content { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional notes about the text content
+    /// </summary>
+    public string? Notes { get; set; }
+
+    /// <summary>
+    /// Optional structured metadata as JSON string
+    /// Examples: {"author": "John Doe", "type": "documentation", "tags": ["tutorial"]}
+    /// </summary>
+    public string? Details { get; set; }
 }
