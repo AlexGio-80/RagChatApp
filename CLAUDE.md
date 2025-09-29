@@ -227,9 +227,51 @@ for i in {1..20}; do curl -X POST "http://localhost:5000/api/your-secured-endpoi
 
 **❌ DEPLOYMENT BLOCKED** if any checklist item is not verified.
 
-## 🗄️ SQL Interface (NEW)
+## 🤖 Multi-Provider AI System (NEW - v1.2.0)
 
-The application now provides a complete SQL interface alongside the REST API, enabling direct database operations via stored procedures.
+The application now features a complete multi-provider AI system supporting OpenAI, Google Gemini, and Azure OpenAI with dynamic switching and configuration-driven selection.
+
+### 🔄 Supported AI Providers
+- **OpenAI**: GPT models and text-embedding-3-small
+- **Google Gemini**: Gemini models and embedding-001
+- **Azure OpenAI**: Enterprise deployment support
+- **Extensible**: Easy to add new providers (Claude, Cohere, etc.)
+
+### ⚙️ Configuration
+```json
+{
+  "AIProvider": {
+    "DefaultProvider": "Gemini",
+    "OpenAI": { "ApiKey": "...", "BaseUrl": "..." },
+    "Gemini": { "ApiKey": "...", "BaseUrl": "..." },
+    "AzureOpenAI": { "ApiKey": "...", "Endpoint": "..." }
+  }
+}
+```
+
+### 🛠️ New API Endpoints
+```bash
+GET  /api/aiprovider/info                    # Provider information
+POST /api/aiprovider/test/embedding         # Test embedding generation
+POST /api/aiprovider/test/all               # Test all providers
+GET  /api/info                              # Enhanced with provider info
+```
+
+### 🗄️ Database Multi-Provider Support
+```sql
+-- Generate embedding with specific provider
+EXEC SP_GenerateEmbedding_MultiProvider
+  @Text = 'sample text',
+  @Provider = 'Gemini',
+  @ApiKey = 'your-key';
+
+-- Test all configured providers
+EXEC SP_TestMultiProviderWorkflow;
+```
+
+## 🗄️ SQL Interface (ENHANCED)
+
+The application provides both REST API and direct SQL interface with multi-provider support.
 
 ### 📋 Available Stored Procedures
 

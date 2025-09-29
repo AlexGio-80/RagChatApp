@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using RagChatApp_Server.Data;
+using RagChatApp_Server.Models;
 using RagChatApp_Server.Services;
+using RagChatApp_Server.Services.AIProviders;
+using RagChatApp_Server.Services.Interfaces;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,6 +13,10 @@ builder.Services.AddControllers();
 // Configure Entity Framework
 builder.Services.AddDbContext<RagChatDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Configure AI Provider settings
+builder.Services.Configure<AIProviderSettings>(
+    builder.Configuration.GetSection("AIProvider"));
 
 // Rate limiting will be configured later with AspNetCoreRateLimit package
 
@@ -26,6 +33,26 @@ builder.Services.AddCors(options =>
 
 // Register custom services
 builder.Services.AddScoped<IDocumentProcessingService, DocumentProcessingService>();
+
+// Register AI provider services
+builder.Services.AddHttpClient<OpenAIProviderService>();
+builder.Services.AddHttpClient<GeminiProviderService>();
+builder.Services.AddHttpClient<AzureOpenAIProviderService>();
+
+builder.Services.AddScoped<OpenAIProviderService>();
+builder.Services.AddScoped<GeminiProviderService>();
+builder.Services.AddScoped<AzureOpenAIProviderService>();
+
+builder.Services.AddScoped<AIProviderFactory>();
+
+// Register the default AI provider service based on configuration
+builder.Services.AddScoped<IAIProviderService>(provider =>
+{
+    var factory = provider.GetRequiredService<AIProviderFactory>();
+    return factory.CreateProvider();
+});
+
+// Keep existing AzureOpenAI service for backward compatibility
 builder.Services.AddScoped<IAzureOpenAIService, AzureOpenAIService>();
 builder.Services.AddHttpClient<IAzureOpenAIService, AzureOpenAIService>();
 
@@ -87,12 +114,14 @@ app.MapGet("/health", () => new { Status = "Healthy", Timestamp = DateTime.UtcNo
     .WithName("HealthCheck");
 
 // API info endpoint
-app.MapGet("/api/info", (IConfiguration config) => new
+app.MapGet("/api/info", (IConfiguration config, AIProviderFactory factory) => new
 {
     ApplicationName = "RAG Chat API",
     Version = "1.0.0",
     Environment = app.Environment.EnvironmentName,
-    MockMode = config.GetValue<bool>("MockMode:Enabled", false)
+    MockMode = config.GetValue<bool>("MockMode:Enabled", false),
+    DefaultAIProvider = factory.GetDefaultProvider().ToString(),
+    AvailableProviders = factory.GetAvailableProviders().Select(p => p.ToString()).ToArray()
 }).WithName("ApiInfo");
 
 app.Run();

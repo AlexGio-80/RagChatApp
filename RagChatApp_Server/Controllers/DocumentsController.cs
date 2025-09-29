@@ -4,6 +4,7 @@ using RagChatApp_Server.Data;
 using RagChatApp_Server.DTOs;
 using RagChatApp_Server.Models;
 using RagChatApp_Server.Services;
+using RagChatApp_Server.Services.Interfaces;
 
 namespace RagChatApp_Server.Controllers;
 
@@ -17,14 +18,14 @@ public class DocumentsController : ControllerBase
     private readonly ILogger<DocumentsController> _logger;
     private readonly RagChatDbContext _context;
     private readonly IDocumentProcessingService _documentService;
-    private readonly IAzureOpenAIService _aiService;
+    private readonly IAIProviderService _aiService;
     private readonly IServiceProvider _serviceProvider;
 
     public DocumentsController(
         ILogger<DocumentsController> logger,
         RagChatDbContext context,
         IDocumentProcessingService documentService,
-        IAzureOpenAIService aiService,
+        IAIProviderService aiService,
         IServiceProvider serviceProvider)
     {
         _logger = logger;
@@ -315,7 +316,7 @@ public class DocumentsController : ControllerBase
         using var scope = _serviceProvider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<RagChatDbContext>();
         var documentService = scope.ServiceProvider.GetRequiredService<IDocumentProcessingService>();
-        var aiService = scope.ServiceProvider.GetRequiredService<IAzureOpenAIService>();
+        var aiService = scope.ServiceProvider.GetRequiredService<IAIProviderService>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<DocumentsController>>();
 
         try
@@ -344,7 +345,8 @@ public class DocumentsController : ControllerBase
                 // Generate and save content embedding
                 if (!string.IsNullOrWhiteSpace(chunk.Content))
                 {
-                    var contentEmbedding = await aiService.GenerateEmbeddingsAsync(chunk.Content);
+                    var contentEmbeddingVector = await aiService.GenerateEmbeddingAsync(chunk.Content, AITaskType.Embedding);
+                    var contentEmbedding = ConvertFloatArrayToBytes(contentEmbeddingVector);
                     var contentEmbeddingEntity = new DocumentChunkContentEmbedding
                     {
                         DocumentChunkId = chunk.Id,
@@ -358,7 +360,8 @@ public class DocumentsController : ControllerBase
                 // Generate and save header context embedding if present
                 if (!string.IsNullOrWhiteSpace(chunk.HeaderContext))
                 {
-                    var headerEmbedding = await aiService.GenerateEmbeddingsAsync(chunk.HeaderContext);
+                    var headerEmbeddingVector = await aiService.GenerateEmbeddingAsync(chunk.HeaderContext, AITaskType.Embedding);
+                    var headerEmbedding = ConvertFloatArrayToBytes(headerEmbeddingVector);
                     var headerEmbeddingEntity = new DocumentChunkHeaderContextEmbedding
                     {
                         DocumentChunkId = chunk.Id,
@@ -372,7 +375,8 @@ public class DocumentsController : ControllerBase
                 // Generate and save notes embedding if present
                 if (!string.IsNullOrWhiteSpace(chunk.Notes))
                 {
-                    var notesEmbedding = await aiService.GenerateEmbeddingsAsync(chunk.Notes);
+                    var notesEmbeddingVector = await aiService.GenerateEmbeddingAsync(chunk.Notes, AITaskType.Embedding);
+                    var notesEmbedding = ConvertFloatArrayToBytes(notesEmbeddingVector);
                     var notesEmbeddingEntity = new DocumentChunkNotesEmbedding
                     {
                         DocumentChunkId = chunk.Id,
@@ -386,7 +390,8 @@ public class DocumentsController : ControllerBase
                 // Generate and save details embedding if present
                 if (!string.IsNullOrWhiteSpace(chunk.Details))
                 {
-                    var detailsEmbedding = await aiService.GenerateEmbeddingsAsync(chunk.Details);
+                    var detailsEmbeddingVector = await aiService.GenerateEmbeddingAsync(chunk.Details, AITaskType.Embedding);
+                    var detailsEmbedding = ConvertFloatArrayToBytes(detailsEmbeddingVector);
                     var detailsEmbeddingEntity = new DocumentChunkDetailsEmbedding
                     {
                         DocumentChunkId = chunk.Id,
@@ -426,5 +431,15 @@ public class DocumentsController : ControllerBase
                 logger.LogError(saveEx, "Failed to update document status to Failed for document: {DocumentId}", documentId);
             }
         }
+    }
+
+    /// <summary>
+    /// Convert float array to byte array for database storage
+    /// </summary>
+    private static byte[] ConvertFloatArrayToBytes(float[] floats)
+    {
+        var bytes = new byte[floats.Length * 4];
+        Buffer.BlockCopy(floats, 0, bytes, 0, bytes.Length);
+        return bytes;
     }
 }
