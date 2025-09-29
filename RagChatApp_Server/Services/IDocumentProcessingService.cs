@@ -19,8 +19,11 @@ public interface IDocumentProcessingService
     /// </summary>
     /// <param name="content">The document content to chunk</param>
     /// <param name="maxChunkSize">Maximum size per chunk (default: 1000 characters)</param>
+    /// <param name="notes">Optional notes to add to each chunk</param>
+    /// <param name="details">Optional details JSON to add to each chunk</param>
+    /// <param name="fileName">Original filename for context-aware chunking</param>
     /// <returns>List of document chunks with preserved structure</returns>
-    Task<List<DocumentChunk>> CreateChunksAsync(string content, int maxChunkSize = 1000);
+    Task<List<DocumentChunk>> CreateChunksAsync(string content, int maxChunkSize = 1000, string? notes = null, string? details = null, string fileName = "");
 
     /// <summary>
     /// Validates if a file type is supported

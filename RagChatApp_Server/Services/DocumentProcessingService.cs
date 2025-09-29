@@ -1,11 +1,9 @@
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
-using iText.Kernel.Pdf;
-using iText.Kernel.Pdf.Canvas.Parser;
-using iText.Kernel.Pdf.Canvas.Parser.Listener;
 using RagChatApp_Server.Models;
 using System.Text;
 using System.Text.RegularExpressions;
+using UglyToad.PdfPig;
 
 namespace RagChatApp_Server.Services;
 
@@ -57,48 +55,65 @@ public class DocumentProcessingService : IDocumentProcessingService
     /// <summary>
     /// Splits document content into chunks based on headers and size limits
     /// </summary>
-    public async Task<List<DocumentChunk>> CreateChunksAsync(string content, int maxChunkSize = 1000)
+    public async Task<List<DocumentChunk>> CreateChunksAsync(string content, int maxChunkSize = 1000, string? notes = null, string? details = null, string fileName = "")
     {
         _logger.LogInformation("Creating chunks from content of length: {Length}", content.Length);
 
         var chunks = new List<DocumentChunk>();
         var chunkIndex = 0;
+        var extension = Path.GetExtension(fileName).ToLowerInvariant();
 
-        // Split by markdown headers first
-        var sections = SplitByHeaders(content);
-
-        foreach (var section in sections)
+        // For markdown and text files, try to use header-based chunking
+        if (extension == ".md" || extension == ".txt")
         {
-            var headerContext = ExtractHeaderContext(section);
-            var sectionContent = ExtractSectionContent(section);
+            var sections = SplitByHeaders(content);
+            if (sections.Count > 1)
+            {
+                foreach (var section in sections)
+                {
+                    var headerContext = ExtractHeaderContext(section);
+                    var sectionContent = ExtractSectionContent(section);
 
-            if (sectionContent.Length <= maxChunkSize)
-            {
-                // Section fits in one chunk
-                chunks.Add(new DocumentChunk
-                {
-                    ChunkIndex = chunkIndex++,
-                    Content = sectionContent.Trim(),
-                    HeaderContext = headerContext
-                });
-            }
-            else
-            {
-                // Split large section into smaller chunks
-                var subChunks = SplitLongText(sectionContent, maxChunkSize);
-                foreach (var subChunk in subChunks)
-                {
-                    chunks.Add(new DocumentChunk
+                    if (!string.IsNullOrWhiteSpace(sectionContent))
                     {
-                        ChunkIndex = chunkIndex++,
-                        Content = subChunk.Trim(),
-                        HeaderContext = headerContext
-                    });
+                        if (sectionContent.Length <= maxChunkSize)
+                        {
+                            chunks.Add(CreateDocumentChunk(chunkIndex++, sectionContent.Trim(), headerContext, notes, details));
+                        }
+                        else
+                        {
+                            var subChunks = SplitLongText(sectionContent, maxChunkSize - 100, 100);
+                            foreach (var subChunk in subChunks)
+                            {
+                                chunks.Add(CreateDocumentChunk(chunkIndex++, subChunk.Trim(), headerContext, notes, details));
+                            }
+                        }
+                    }
                 }
+                _logger.LogInformation("Created {ChunkCount} chunks using header-based splitting", chunks.Count);
+                return chunks;
             }
         }
 
-        _logger.LogInformation("Created {ChunkCount} chunks", chunks.Count);
+        // For PDF files, try to identify structure first
+        if (extension == ".pdf")
+        {
+            var structuredChunks = TryExtractPdfStructure(content, notes, details, ref chunkIndex);
+            if (structuredChunks.Any())
+            {
+                _logger.LogInformation("Created {ChunkCount} chunks using PDF structure", structuredChunks.Count);
+                return structuredChunks;
+            }
+        }
+
+        // Fallback to fixed-size chunking for files without clear structure
+        var fixedChunks = SplitLongText(content, maxChunkSize - 100, 100);
+        foreach (var chunk in fixedChunks)
+        {
+            chunks.Add(CreateDocumentChunk(chunkIndex++, chunk.Trim(), null, notes, details));
+        }
+
+        _logger.LogInformation("Created {ChunkCount} chunks using fixed-size splitting", chunks.Count);
         return chunks;
     }
 
@@ -118,21 +133,30 @@ public class DocumentProcessingService : IDocumentProcessingService
 
     private async Task<string> ExtractFromPdfAsync(IFormFile file)
     {
-        var content = new StringBuilder();
-
-        using var stream = file.OpenReadStream();
-        using var reader = new PdfReader(stream);
-        using var document = new PdfDocument(reader);
-
-        for (int i = 1; i <= document.GetNumberOfPages(); i++)
+        try
         {
-            var page = document.GetPage(i);
-            var strategy = new SimpleTextExtractionStrategy();
-            var pageText = PdfTextExtractor.GetTextFromPage(page, strategy);
-            content.AppendLine(pageText);
-        }
+            using var stream = file.OpenReadStream();
+            using var document = PdfDocument.Open(stream);
+            var content = new StringBuilder();
 
-        return content.ToString();
+            foreach (var page in document.GetPages())
+            {
+                var pageText = page.Text;
+                if (!string.IsNullOrWhiteSpace(pageText))
+                {
+                    // Normalize text: remove excessive whitespace and line breaks
+                    pageText = NormalizeText(pageText);
+                    content.AppendLine(pageText);
+                }
+            }
+
+            return content.ToString();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error extracting text from PDF file {FileName}", file.FileName);
+            throw new InvalidOperationException($"Failed to extract text from PDF: {ex.Message}", ex);
+        }
     }
 
     private async Task<string> ExtractFromDocxAsync(IFormFile file)
@@ -282,5 +306,154 @@ public class DocumentProcessingService : IDocumentProcessingService
             .ToList();
 
         return sentences.Any() ? sentences : new List<string> { text };
+    }
+
+    private DocumentChunk CreateDocumentChunk(int chunkIndex, string content, string? headerContext, string? notes, string? details)
+    {
+        return new DocumentChunk
+        {
+            ChunkIndex = chunkIndex,
+            Content = content,
+            HeaderContext = headerContext,
+            Notes = notes,
+            Details = details
+        };
+    }
+
+    private List<DocumentChunk> TryExtractPdfStructure(string text, string? notes, string? details, ref int chunkIndex)
+    {
+        var chunks = new List<DocumentChunk>();
+
+        // Try to identify sections based on common PDF patterns
+        var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var currentSection = new StringBuilder();
+        string? currentHeader = null;
+
+        foreach (var line in lines)
+        {
+            var trimmedLine = line.Trim();
+
+            // Simple heuristic for identifying headers in PDFs
+            if (IsLikelyPdfHeader(trimmedLine))
+            {
+                // Save previous section
+                if (currentSection.Length > 0)
+                {
+                    var content = currentSection.ToString().Trim();
+                    if (!string.IsNullOrWhiteSpace(content))
+                    {
+                        chunks.Add(CreateDocumentChunk(chunkIndex++, content, currentHeader, notes, details));
+                    }
+                }
+
+                // Start new section
+                currentHeader = trimmedLine;
+                currentSection.Clear();
+            }
+            else
+            {
+                currentSection.AppendLine(trimmedLine);
+            }
+        }
+
+        // Add final section
+        if (currentSection.Length > 0)
+        {
+            var content = currentSection.ToString().Trim();
+            if (!string.IsNullOrWhiteSpace(content))
+            {
+                chunks.Add(CreateDocumentChunk(chunkIndex++, content, currentHeader, notes, details));
+            }
+        }
+
+        // If we found meaningful structure, return it
+        if (chunks.Count > 1 && chunks.Any(c => !string.IsNullOrEmpty(c.HeaderContext)))
+        {
+            return chunks;
+        }
+
+        return new List<DocumentChunk>();
+    }
+
+    private bool IsLikelyPdfHeader(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line) || line.Length > 100)
+            return false;
+
+        // Common patterns for PDF headers
+        return Regex.IsMatch(line, @"^(\d+\.?\s+|\w+\.?\s+)?[A-Z][^.!?]*$") ||
+               Regex.IsMatch(line, @"^\d+\.\d+(\.\d+)?\s+[A-Z]") ||
+               line.All(c => char.IsUpper(c) || char.IsWhiteSpace(c) || char.IsDigit(c) || c == '.');
+    }
+
+    private List<string> SplitLongText(string text, int maxChunkSize = 750, int overlap = 100)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return new List<string>();
+
+        var chunks = new List<string>();
+
+        // First try to split by sentences
+        var sentences = SplitIntoSentences(text);
+        var currentChunk = new StringBuilder();
+
+        foreach (var sentence in sentences)
+        {
+            if (currentChunk.Length + sentence.Length <= maxChunkSize)
+            {
+                currentChunk.Append(sentence);
+            }
+            else
+            {
+                if (currentChunk.Length > 0)
+                {
+                    chunks.Add(currentChunk.ToString().Trim());
+
+                    // Add overlap from the end of current chunk
+                    var overlapText = GetOverlapText(currentChunk.ToString(), overlap);
+                    currentChunk.Clear();
+                    currentChunk.Append(overlapText);
+                }
+                currentChunk.Append(sentence);
+            }
+        }
+
+        if (currentChunk.Length > 0)
+        {
+            chunks.Add(currentChunk.ToString().Trim());
+        }
+
+        return chunks.Where(c => !string.IsNullOrWhiteSpace(c)).ToList();
+    }
+
+    private string GetOverlapText(string text, int maxOverlapLength)
+    {
+        if (text.Length <= maxOverlapLength)
+            return text;
+
+        // Try to find a good breaking point (end of sentence)
+        var overlapStart = text.Length - maxOverlapLength;
+        var lastSentenceEnd = text.LastIndexOf('.', text.Length - 1, maxOverlapLength);
+
+        if (lastSentenceEnd > overlapStart)
+        {
+            return text.Substring(lastSentenceEnd + 1).Trim();
+        }
+
+        return text.Substring(overlapStart).Trim();
+    }
+
+    private string NormalizeText(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+
+        // Remove excessive whitespace
+        text = Regex.Replace(text, @"\s+", " ");
+
+        // Remove unnecessary line breaks but preserve paragraph structure
+        text = Regex.Replace(text, @"(\r\n|\r|\n)+", "\n");
+
+        return text.Trim();
     }
 }

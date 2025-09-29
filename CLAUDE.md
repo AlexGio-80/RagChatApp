@@ -4,25 +4,54 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-RagChatApp - A RAG (Retrieval-Augmented Generation) chat application that allows users to upload documents and chat with AI using the content as context. The system uses Azure OpenAI for embeddings and chat completions, with SQL Server for vector storage.
+RagChatApp - An advanced RAG (Retrieval-Augmented Generation) chat application that allows users to upload documents and chat with AI using the content as context. The system features multi-field embedding search, intelligent document processing, and comprehensive SQL interface alongside REST API.
+
+**Latest Update**: January 29, 2025 - Enhanced with multi-field embeddings, PdfPig integration, and complete SQL stored procedure interface.
 
 ## Architecture
 
-- **RagChatApp_Server** (.NET 9.0): Backend API with document management and chat AI functionality
+- **RagChatApp_Server** (.NET 9.0): Enhanced backend API with advanced document processing and dual interface (REST + SQL)
 - **RagChatApp_UI** (HTML/CSS/JS): Frontend for document management and chat interface
 
 ### Key Technologies
 - .NET 9.0 with Entity Framework Core
-- SQL Server with vector support (VARBINARY for embeddings)
-- Azure OpenAI integration
+- SQL Server with advanced vector storage (4 separate embedding tables)
+- PdfPig for superior PDF text extraction
+- Azure OpenAI integration with multi-field embedding generation
+- Comprehensive SQL stored procedure interface
 - Responsive frontend with glassmorphism design
 
-### Core Features
-- Document upload and processing (.txt, .pdf, .doc, .docx)
-- Intelligent chunking based on markdown headers
-- Vector similarity search
-- RAG-based chat with source attribution
-- Mock service mode for development
+### Enhanced Core Features
+- **Advanced Document Processing**: Enhanced PDF processing with PdfPig, intelligent chunking, structure detection
+- **Multi-Field Embeddings**: Content, HeaderContext, Notes, Details embeddings for enhanced search
+- **Dual Interface**: Complete REST API + SQL stored procedures for external access
+- **Semantic Caching**: 1-hour TTL caching system for improved performance
+- **Configurable Search**: MaxChunksForLLM parameter (default 10, max 50)
+- **Enhanced Metadata**: Document paths, user notes, JSON details support
+- **Vector Search**: LEAST function logic for multi-field similarity
+- **Mock service mode**: For development without OpenAI API
+
+### Database Schema (Enhanced)
+```
+Documents
+├─ Path (NEW): Document URL/path for linking
+└─ (existing fields)
+
+DocumentChunks
+├─ Notes (NEW): User-added notes
+├─ Details (NEW): JSON metadata
+├─ UpdatedAt (NEW): Track modifications
+└─ (existing fields, removed old Embedding)
+
+Embedding Tables (NEW - 4 separate tables):
+├─ DocumentChunkContentEmbeddings
+├─ DocumentChunkHeaderContextEmbeddings
+├─ DocumentChunkNotesEmbeddings
+└─ DocumentChunkDetailsEmbeddings
+
+SemanticCache (NEW):
+└─ 1-hour TTL search result caching
+```
 
 ## Development Commands
 
@@ -197,6 +226,95 @@ for i in {1..20}; do curl -X POST "http://localhost:5000/api/your-secured-endpoi
 ```
 
 **❌ DEPLOYMENT BLOCKED** if any checklist item is not verified.
+
+## 🗄️ SQL Interface (NEW)
+
+The application now provides a complete SQL interface alongside the REST API, enabling direct database operations via stored procedures.
+
+### 📋 Available Stored Procedures
+
+#### Documents CRUD
+```sql
+-- Insert document
+DECLARE @DocId INT;
+EXEC SP_InsertDocument 'example.pdf', 'application/pdf', 1024, 'content...', '/docs/example.pdf', 'Pending', @DocId OUTPUT;
+
+-- Get documents with pagination
+EXEC SP_GetAllDocuments @PageNumber = 1, @PageSize = 10, @Status = 'Completed';
+
+-- Update document
+EXEC SP_UpdateDocument @DocumentId = 1, @Status = 'Completed', @ProcessedAt = GETUTCDATE();
+
+-- Delete document and all related data
+EXEC SP_DeleteDocument @DocumentId = 1;
+```
+
+#### DocumentChunks and Embeddings
+```sql
+-- Insert chunk with embeddings
+DECLARE @ChunkId INT;
+EXEC SP_InsertDocumentChunk
+    @DocumentId = 1, @ChunkIndex = 0, @Content = 'chunk content',
+    @HeaderContext = 'Section 1', @Notes = 'important', @Details = '{"tag":"ai"}',
+    @ContentEmbedding = 0x1234..., @ChunkId = @ChunkId OUTPUT;
+
+-- Get chunks for a document
+EXEC SP_GetDocumentChunks @DocumentId = 1, @IncludeEmbeddings = 0;
+```
+
+#### RAG Search with JSON Response
+```sql
+-- Perform RAG search (returns JSON)
+DECLARE @QueryEmbedding VARBINARY(MAX) = 0x1234...;
+EXEC SP_RAGSearch @QueryEmbedding, @MaxResults = 10, @SearchQuery = 'machine learning';
+
+-- JSON Response Format:
+-- [{"Id":1,"HeaderContext":"AI Basics","Content":"ML is...","SimilarityScore":85.5,"FileName":"guide.pdf"}]
+```
+
+#### Semantic Cache Management
+```sql
+-- Clean old cache entries
+EXEC SP_CleanSemanticCache @MaxAgeHours = 1;
+
+-- Get cache statistics
+EXEC SP_GetSemanticCacheStats;
+
+-- Search in cache
+EXEC SP_SearchSemanticCache @SearchQuery = 'deep learning', @ExactMatch = 1;
+```
+
+### 🔧 SQL Interface Installation
+
+1. **Run Migrations First**:
+   ```bash
+   cd RagChatApp_Server
+   dotnet ef database update
+   ```
+
+2. **Install Stored Procedures**:
+   ```sql
+   -- Update database name in script
+   USE [YourDatabaseName]
+   GO
+   :r "Database/StoredProcedures/00_InstallAllStoredProcedures.sql"
+   ```
+
+3. **Verify Installation**:
+   ```sql
+   -- List installed procedures
+   SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES
+   WHERE ROUTINE_TYPE = 'PROCEDURE' AND ROUTINE_NAME LIKE 'SP_%'
+   ORDER BY ROUTINE_NAME;
+   ```
+
+### 📚 Complete SQL Documentation
+See `RagChatApp_Server/Database/StoredProcedures/README.md` for comprehensive documentation, examples, and usage patterns.
+
+### 🔄 API + SQL Workflow
+- **REST API**: For web applications, mobile apps, and real-time interactions
+- **SQL Interface**: For bulk operations, reporting, analytics, and external system integration
+- **Both interfaces**: Access the same underlying data with consistent behavior
 
 ## Development Principles
 

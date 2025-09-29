@@ -62,6 +62,11 @@ public class ChatSource
     public string DocumentName { get; set; } = string.Empty;
 
     /// <summary>
+    /// Path or URL of the source document
+    /// </summary>
+    public string? DocumentPath { get; set; }
+
+    /// <summary>
     /// The relevant chunk content
     /// </summary>
     public string Content { get; set; } = string.Empty;
@@ -70,6 +75,16 @@ public class ChatSource
     /// Header context for the chunk
     /// </summary>
     public string? HeaderContext { get; set; }
+
+    /// <summary>
+    /// Notes associated with the chunk
+    /// </summary>
+    public string? Notes { get; set; }
+
+    /// <summary>
+    /// Additional details as JSON for the chunk
+    /// </summary>
+    public string? Details { get; set; }
 
     /// <summary>
     /// Similarity score for this chunk

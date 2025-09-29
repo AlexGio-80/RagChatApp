@@ -329,18 +329,74 @@ public class DocumentsController : ControllerBase
                 return;
             }
 
-            // Create chunks
-            var chunks = await documentService.CreateChunksAsync(document.Content);
+            // Create chunks with enhanced chunking logic
+            var chunks = await documentService.CreateChunksAsync(document.Content, 1000, null, null, document.FileName);
 
-            // Generate embeddings for each chunk
+            // Generate embeddings for each chunk and save to database
             foreach (var chunk in chunks)
             {
                 chunk.DocumentId = documentId;
-                chunk.Embedding = await aiService.GenerateEmbeddingsAsync(chunk.Content);
-            }
+                
+                // Add the chunk first to get the ID
+                context.DocumentChunks.Add(chunk);
+                await context.SaveChangesAsync(); // Save to get the chunk ID
 
-            // Save chunks to database
-            context.DocumentChunks.AddRange(chunks);
+                // Generate and save content embedding
+                if (!string.IsNullOrWhiteSpace(chunk.Content))
+                {
+                    var contentEmbedding = await aiService.GenerateEmbeddingsAsync(chunk.Content);
+                    var contentEmbeddingEntity = new DocumentChunkContentEmbedding
+                    {
+                        DocumentChunkId = chunk.Id,
+                        Embedding = contentEmbedding,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    context.DocumentChunkContentEmbeddings.Add(contentEmbeddingEntity);
+                }
+
+                // Generate and save header context embedding if present
+                if (!string.IsNullOrWhiteSpace(chunk.HeaderContext))
+                {
+                    var headerEmbedding = await aiService.GenerateEmbeddingsAsync(chunk.HeaderContext);
+                    var headerEmbeddingEntity = new DocumentChunkHeaderContextEmbedding
+                    {
+                        DocumentChunkId = chunk.Id,
+                        Embedding = headerEmbedding,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    context.DocumentChunkHeaderContextEmbeddings.Add(headerEmbeddingEntity);
+                }
+
+                // Generate and save notes embedding if present
+                if (!string.IsNullOrWhiteSpace(chunk.Notes))
+                {
+                    var notesEmbedding = await aiService.GenerateEmbeddingsAsync(chunk.Notes);
+                    var notesEmbeddingEntity = new DocumentChunkNotesEmbedding
+                    {
+                        DocumentChunkId = chunk.Id,
+                        Embedding = notesEmbedding,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    context.DocumentChunkNotesEmbeddings.Add(notesEmbeddingEntity);
+                }
+
+                // Generate and save details embedding if present
+                if (!string.IsNullOrWhiteSpace(chunk.Details))
+                {
+                    var detailsEmbedding = await aiService.GenerateEmbeddingsAsync(chunk.Details);
+                    var detailsEmbeddingEntity = new DocumentChunkDetailsEmbedding
+                    {
+                        DocumentChunkId = chunk.Id,
+                        Embedding = detailsEmbedding,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    context.DocumentChunkDetailsEmbeddings.Add(detailsEmbeddingEntity);
+                }
+            }
 
             // Update document status
             document.Status = "Completed";

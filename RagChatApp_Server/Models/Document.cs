@@ -40,6 +40,12 @@ public class Document
     public string Content { get; set; } = string.Empty;
 
     /// <summary>
+    /// Path or URL of the document for referencing in results
+    /// </summary>
+    [MaxLength(500)]
+    public string? Path { get; set; }
+
+    /// <summary>
     /// Date and time when the document was uploaded
     /// </summary>
     public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
