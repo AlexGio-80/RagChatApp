@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using RagChatApp_Server.DTOs;
 using RagChatApp_Server.Services;
+using RagChatApp_Server.Services.AIProviders;
+using RagChatApp_Server.Services.Interfaces;
 
 namespace RagChatApp_Server.Controllers;
 
@@ -13,13 +15,16 @@ public class ChatController : ControllerBase
 {
     private readonly ILogger<ChatController> _logger;
     private readonly IAzureOpenAIService _aiService;
+    private readonly IAIProviderService _aiProvider;
 
     public ChatController(
         ILogger<ChatController> logger,
-        IAzureOpenAIService aiService)
+        IAzureOpenAIService aiService,
+        AIProviderFactory providerFactory)
     {
         _logger = logger;
         _aiService = aiService;
+        _aiProvider = providerFactory.CreateProvider();
     }
 
     /// <summary>

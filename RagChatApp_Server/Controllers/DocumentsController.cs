@@ -62,13 +62,27 @@ public class DocumentsController : ControllerBase
             // Extract text content
             var content = await _documentService.ExtractTextAsync(request.File);
 
-            // Create document record
+            // Save file physically to uploads folder
+            var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "Uploads");
+            Directory.CreateDirectory(uploadsFolder); // Ensure folder exists
+
+            // Generate unique filename to avoid conflicts
+            var uniqueFileName = $"{DateTime.UtcNow:yyyyMMddHHmmss}_{request.File.FileName}";
+            var filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await request.File.CopyToAsync(stream);
+            }
+
+            // Create document record with absolute path
             var document = new Document
             {
                 FileName = request.File.FileName,
                 ContentType = request.File.ContentType,
                 Size = request.File.Length,
                 Content = content,
+                Path = Path.GetFullPath(filePath), // Absolute physical path
                 Status = "Processing"
             };
 
@@ -97,6 +111,7 @@ public class DocumentsController : ControllerBase
                 ContentType = document.ContentType,
                 Size = document.Size,
                 Status = document.Status,
+                Path = document.Path,
                 UploadedAt = document.UploadedAt,
                 ChunkCount = 0
             };
@@ -151,6 +166,7 @@ public class DocumentsController : ControllerBase
                 ContentType = document.ContentType,
                 Size = document.Size,
                 Status = document.Status,
+                Path = document.Path,
                 UploadedAt = document.UploadedAt,
                 ChunkCount = 0
             };
@@ -189,6 +205,7 @@ public class DocumentsController : ControllerBase
                     ContentType = d.ContentType,
                     Size = d.Size,
                     Status = d.Status,
+                    Path = d.Path,
                     UploadedAt = d.UploadedAt,
                     ProcessedAt = d.ProcessedAt,
                     ChunkCount = d.Chunks.Count
@@ -257,6 +274,7 @@ public class DocumentsController : ControllerBase
                 ContentType = document.ContentType,
                 Size = document.Size,
                 Status = document.Status,
+                Path = document.Path,
                 UploadedAt = document.UploadedAt,
                 ProcessedAt = document.ProcessedAt,
                 ChunkCount = 0

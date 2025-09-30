@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 RagChatApp - An advanced RAG (Retrieval-Augmented Generation) chat application that allows users to upload documents and chat with AI using the content as context. The system features multi-field embedding search, intelligent document processing, and comprehensive SQL interface alongside REST API.
 
-**Latest Update**: September 30, 2025 - Fixed multi-provider AI system HttpClient configuration for proper URL path handling with OpenAI and Gemini providers.
+**Latest Update**: September 30, 2025 - Implemented cosine similarity vector search with multi-field embeddings and added document opening feature in chat interface.
 
 ## Architecture
 
@@ -24,11 +24,12 @@ RagChatApp - An advanced RAG (Retrieval-Augmented Generation) chat application t
 ### Enhanced Core Features
 - **Advanced Document Processing**: Enhanced PDF processing with PdfPig, intelligent chunking, structure detection
 - **Multi-Field Embeddings**: Content, HeaderContext, Notes, Details embeddings for enhanced search
+- **Cosine Similarity Vector Search**: In-memory vector search with multi-field embedding support, proper similarity scoring
+- **Document Opening from Chat**: Click-to-open document feature in chat sources with clipboard fallback
 - **Dual Interface**: Complete REST API + SQL stored procedures for external access
 - **Semantic Caching**: 1-hour TTL caching system for improved performance
 - **Configurable Search**: MaxChunksForLLM parameter (default 10, max 50)
 - **Enhanced Metadata**: Document paths, user notes, JSON details support
-- **Vector Search**: LEAST function logic for multi-field similarity
 - **Mock service mode**: For development without OpenAI API
 
 ### Database Schema (Enhanced)
@@ -227,11 +228,62 @@ for i in {1..20}; do curl -X POST "http://localhost:5000/api/your-secured-endpoi
 
 **❌ DEPLOYMENT BLOCKED** if any checklist item is not verified.
 
-## 🤖 Multi-Provider AI System (v1.2.1 - FIXED)
+## 🔍 Vector Search System (v1.3.0 - NEW)
+
+The application now implements proper cosine similarity vector search for accurate document retrieval.
+
+**New Implementation (Sept 30, 2025)**: Replaced fallback text search with in-memory cosine similarity calculation across multi-field embeddings (Content, HeaderContext, Notes, Details). The system now provides accurate similarity scores and returns the most relevant chunks for RAG responses.
+
+### 🎯 Vector Search Features
+- **Cosine Similarity**: Accurate vector distance calculation using dot product and magnitude
+- **Multi-Field Support**: Searches across Content, HeaderContext, Notes, and Details embeddings
+- **Maximum Score**: Takes the highest similarity score across all embedding fields
+- **Configurable Results**: Returns top N chunks (configurable via `MaxChunksForLLM`)
+- **Performance**: In-memory calculation for optimal speed with reasonable dataset sizes
+
+### 📊 Search Flow
+1. **Query Embedding**: User query is converted to vector embedding via configured AI provider
+2. **Load Chunks**: Retrieves all document chunks with their embeddings from database
+3. **Calculate Similarity**: Computes cosine similarity between query vector and each chunk's embeddings
+4. **Rank Results**: Sorts by similarity score (descending) and returns top N chunks
+5. **RAG Response**: AI generates response using retrieved chunks as context
+
+### 💻 Implementation Details
+Located in `RagChatApp_Server/Services/AzureOpenAIService.cs`:
+- `PerformMultiFieldVectorSearchAsync()`: Main vector search method
+- `CosineSimilarity()`: Cosine similarity calculation
+- `ConvertByteArrayToFloatArray()`: Helper for byte[] ↔ float[] conversion
+
+### 📈 Example Results
+Query: "sistema operativo richiesto"
+- Top result: 79.5% similarity (Requisiti di Sistema section)
+- Returns 5 most relevant chunks with accurate scores
+- AI generates precise answer: "Windows 10 (64-bit) o macOS 10.15 (Catalina) e superiori"
+
+## 📂 Document Opening Feature (v1.3.0 - NEW)
+
+Chat interface now includes the ability to open source documents directly from chat responses.
+
+### 🔗 Features
+- **Click-to-Open Button**: Each chat source displays a "📂 Apri" button if document path is available
+- **Browser Opening**: Attempts to open document in new window/tab using `file:///` protocol
+- **Clipboard Fallback**: If browser blocks file access, offers to copy path to clipboard
+- **Cross-Browser Support**: Uses modern Clipboard API with fallback for older browsers
+- **User-Friendly**: Shows confirmation toasts and helpful dialogs
+
+### 🎨 UI Implementation
+Located in `RagChatApp_UI/js/app.js`:
+- `openDocument()`: Main document opening function
+- `showDocumentPathDialog()`: Fallback dialog with clipboard option
+- `copyToClipboard()`: Modern and fallback clipboard copy methods
+
+Styled with glassmorphism design in `RagChatApp_UI/css/style.css`:
+- `.btn-link`: Consistent button styling with hover effects
+- `.source-header`: Flexbox layout for buttons and metadata
+
+## 🤖 Multi-Provider AI System (v1.2.1)
 
 The application features a complete multi-provider AI system supporting OpenAI, Google Gemini, and Azure OpenAI with dynamic switching and configuration-driven selection.
-
-**Recent Fix (Sept 30, 2025)**: Resolved HttpClient URL path concatenation issues where BaseAddress configuration was not properly handling trailing slashes, causing 404 errors with OpenAI and Gemini API endpoints.
 
 ### 🔄 Supported AI Providers
 - **OpenAI**: GPT models and text-embedding-3-small

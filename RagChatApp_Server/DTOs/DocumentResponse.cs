@@ -31,6 +31,11 @@ public class DocumentResponse
     public string Status { get; set; } = string.Empty;
 
     /// <summary>
+    /// Document path or URL for referencing
+    /// </summary>
+    public string? Path { get; set; }
+
+    /// <summary>
     /// Upload timestamp
     /// </summary>
     public DateTime UploadedAt { get; set; }

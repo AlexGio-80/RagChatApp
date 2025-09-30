@@ -325,6 +325,9 @@ RagChatApp_UI/node_modules/
 # Test files (keep for documentation but don't commit to main)
 test-*.txt
 
+# Uploaded documents (user data - not tracked)
+RagChatApp_Server/Uploads/
+
 # Claude Code settings (local only)
 .claude/settings.local.json
 

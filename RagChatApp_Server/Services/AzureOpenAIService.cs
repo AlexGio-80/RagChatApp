@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using RagChatApp_Server.Data;
 using RagChatApp_Server.DTOs;
 using RagChatApp_Server.Models;
+using RagChatApp_Server.Services.AIProviders;
+using RagChatApp_Server.Services.Interfaces;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -9,7 +11,7 @@ using System.Text.Json;
 namespace RagChatApp_Server.Services;
 
 /// <summary>
-/// Service for Azure OpenAI integration with mock mode support
+/// Service for AI integration with RAG support using multi-provider system
 /// </summary>
 public class AzureOpenAIService : IAzureOpenAIService
 {
@@ -18,6 +20,7 @@ public class AzureOpenAIService : IAzureOpenAIService
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IAIProviderService _aiProvider;
     private readonly bool _isMockMode;
 
     public AzureOpenAIService(
@@ -25,43 +28,28 @@ public class AzureOpenAIService : IAzureOpenAIService
         RagChatDbContext context,
         HttpClient httpClient,
         IConfiguration configuration,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        AIProviderFactory providerFactory)
     {
         _logger = logger;
         _context = context;
         _httpClient = httpClient;
         _configuration = configuration;
         _serviceProvider = serviceProvider;
+        _aiProvider = providerFactory.CreateProvider();
 
         // Check if mock mode is enabled
         _isMockMode = _configuration.GetValue<bool>("MockMode:Enabled", false);
 
-        if (!_isMockMode)
-        {
-            // Configure HTTP client for OpenAI API
-            var apiKey = _configuration["OpenAI:ApiKey"];
-            
-            if (!string.IsNullOrEmpty(apiKey))
-            {
-                _httpClient.DefaultRequestHeaders.Authorization =
-                    new AuthenticationHeaderValue("Bearer", apiKey);
-            }
-
-            // Set OpenAI API base URL
-            _httpClient.BaseAddress = new Uri("https://api.openai.com/");
-        }
-
-        _logger.LogInformation("OpenAI Service initialized in {Mode} mode", 
-            _isMockMode ? "Mock" : "Connected");
+        _logger.LogInformation("RAG Service initialized in {Mode} mode using provider: {Provider}",
+            _isMockMode ? "Mock" : "Connected",
+            _aiProvider.GetCurrentProvider());
     }
 
     public bool IsMockMode => _isMockMode;
 
     /// <summary>
-    /// Generates embeddings for text content
-    /// </summary>
-    /// <summary>
-    /// Generates embeddings for text content using OpenAI API
+    /// Generates embeddings for text content using configured AI provider
     /// </summary>
     public async Task<byte[]> GenerateEmbeddingsAsync(string text)
     {
@@ -74,32 +62,10 @@ public class AzureOpenAIService : IAzureOpenAIService
 
         try
         {
-            // Use OpenAI standard API instead of Azure OpenAI
-            var embeddingModel = _configuration["OpenAI:EmbeddingModel"] ?? "text-embedding-3-small";
-            
-            var requestBody = new
-            {
-                input = text,
-                model = embeddingModel
-            };
+            // Use configured AI provider (OpenAI, Gemini, or Azure OpenAI)
+            var embedding = await _aiProvider.GenerateEmbeddingAsync(text, AITaskType.Embedding);
 
-            var jsonContent = JsonSerializer.Serialize(requestBody);
-            var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-
-            // OpenAI standard endpoint
-            var response = await _httpClient.PostAsync("v1/embeddings", content);
-            response.EnsureSuccessStatusCode();
-
-            var responseJson = await response.Content.ReadAsStringAsync();
-            var embeddingResponse = JsonSerializer.Deserialize<JsonElement>(responseJson);
-
-            var embedding = embeddingResponse
-                .GetProperty("data")[0]
-                .GetProperty("embedding")
-                .EnumerateArray()
-                .Select(x => x.GetSingle())
-                .ToArray();
-
+            // Convert float array to byte array for database storage
             return ConvertFloatArrayToByteArray(embedding);
         }
         catch (Exception ex)
@@ -179,41 +145,24 @@ public class AzureOpenAIService : IAzureOpenAIService
             // Build context from relevant chunks
             var context = BuildContextFromChunks(relevantChunks);
 
-            // Create chat completion request
+            // Create chat completion request using configured AI provider
             var systemMessage = "You are a helpful assistant that answers questions based on the provided context. " +
                                "If the context doesn't contain enough information to answer the question, say so clearly.";
 
             var userMessage = $"Context:\n{context}\n\nQuestion: {request.Message}";
 
-            var chatModel = _configuration["OpenAI:ChatModel"] ?? "gpt-4o-mini";
-            
-            var requestBody = new
+            var messages = new List<ChatMessage>
             {
-                messages = new[]
-                {
-                    new { role = "system", content = systemMessage },
-                    new { role = "user", content = userMessage }
-                },
-                model = chatModel,
-                max_tokens = 1000,
-                temperature = 0.7
+                new ChatMessage { Role = "system", Content = systemMessage },
+                new ChatMessage { Role = "user", Content = userMessage }
             };
 
-            var jsonContent = JsonSerializer.Serialize(requestBody);
-            var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-
-            // OpenAI standard endpoint
-            var response = await _httpClient.PostAsync("v1/chat/completions", content);
-            response.EnsureSuccessStatusCode();
-
-            var responseJson = await response.Content.ReadAsStringAsync();
-            var chatResponse = JsonSerializer.Deserialize<JsonElement>(responseJson);
-
-            var aiResponse = chatResponse
-                .GetProperty("choices")[0]
-                .GetProperty("message")
-                .GetProperty("content")
-                .GetString() ?? "I apologize, but I couldn't generate a response.";
+            // Use configured AI provider for chat completion
+            var aiResponse = await _aiProvider.GenerateChatCompletionAsync(
+                messages,
+                maxTokens: 1000,
+                temperature: 0.7f,
+                taskType: AITaskType.Chat);
 
             return new ChatResponse
             {
@@ -342,6 +291,35 @@ public class AzureOpenAIService : IAzureOpenAIService
         return bytes;
     }
 
+    private float[] ConvertByteArrayToFloatArray(byte[] bytes)
+    {
+        var floats = new float[bytes.Length / 4];
+        Buffer.BlockCopy(bytes, 0, floats, 0, bytes.Length);
+        return floats;
+    }
+
+    private double CosineSimilarity(float[] vectorA, float[] vectorB)
+    {
+        if (vectorA.Length != vectorB.Length)
+            throw new ArgumentException("Vectors must have the same length");
+
+        double dotProduct = 0;
+        double magnitudeA = 0;
+        double magnitudeB = 0;
+
+        for (int i = 0; i < vectorA.Length; i++)
+        {
+            dotProduct += vectorA[i] * vectorB[i];
+            magnitudeA += vectorA[i] * vectorA[i];
+            magnitudeB += vectorB[i] * vectorB[i];
+        }
+
+        if (magnitudeA == 0 || magnitudeB == 0)
+            return 0;
+
+        return dotProduct / (Math.Sqrt(magnitudeA) * Math.Sqrt(magnitudeB));
+    }
+
     /// <summary>
     /// Extract meaningful keywords from search query
     /// </summary>
@@ -432,56 +410,87 @@ public class AzureOpenAIService : IAzureOpenAIService
 
     private async Task<List<ChatSource>> PerformMultiFieldVectorSearchAsync(byte[] queryEmbedding, int maxResults)
     {
-        // Since Entity Framework doesn't support complex vector operations like LEAST,
-        // we'll use raw SQL for the multi-field vector search
-        var sql = @"
-            SET @k = @maxResults;
-            
-            SELECT TOP(@k) 
-                dc.Id,
-                dc.Content, 
-                dc.HeaderContext, 
-                dc.Notes, 
-                dc.Details,
-                d.FileName,
-                d.Path,
-                COALESCE(
-                    (SELECT MIN(vector_distance('cosine', embedding, @queryEmbedding))
-                     FROM (
-                         SELECT dcce.Embedding as embedding FROM DocumentChunkContentEmbeddings dcce WHERE dcce.DocumentChunkId = dc.Id
-                         UNION ALL
-                         SELECT dchce.Embedding as embedding FROM DocumentChunkHeaderContextEmbeddings dchce WHERE dchce.DocumentChunkId = dc.Id
-                         UNION ALL
-                         SELECT dcne.Embedding as embedding FROM DocumentChunkNotesEmbeddings dcne WHERE dcne.DocumentChunkId = dc.Id
-                         UNION ALL
-                         SELECT dcde.Embedding as embedding FROM DocumentChunkDetailsEmbeddings dcde WHERE dcde.DocumentChunkId = dc.Id
-                     ) as embeddings),
-                    1.0
-                ) as cosine_distance
-            FROM 
-                DocumentChunks dc
-            INNER JOIN 
-                Documents d ON dc.DocumentId = d.Id
-            LEFT JOIN
-                DocumentChunkContentEmbeddings dcce ON dc.Id = dcce.DocumentChunkId
-            LEFT JOIN
-                DocumentChunkHeaderContextEmbeddings dchce ON dc.Id = dchce.DocumentChunkId
-            LEFT JOIN
-                DocumentChunkNotesEmbeddings dcne ON dc.Id = dcne.DocumentChunkId
-            LEFT JOIN
-                DocumentChunkDetailsEmbeddings dcde ON dc.Id = dcde.DocumentChunkId
-            WHERE 
-                dcce.Embedding IS NOT NULL OR 
-                dchce.Embedding IS NOT NULL OR 
-                dcne.Embedding IS NOT NULL OR 
-                dcde.Embedding IS NOT NULL
-            ORDER BY 
-                cosine_distance ASC";
-
         try
         {
-            // For now, fall back to simple text search until we can implement proper vector search
-            return await FallbackTextSearchAsync(maxResults);
+            // Convert byte[] to float[] for comparison
+            var queryVector = ConvertByteArrayToFloatArray(queryEmbedding);
+
+            // Get all chunks with their embeddings
+            var chunks = await _context.DocumentChunks
+                .Include(c => c.Document)
+                .Include(c => c.ContentEmbedding)
+                .Include(c => c.HeaderContextEmbedding)
+                .Include(c => c.NotesEmbedding)
+                .Include(c => c.DetailsEmbedding)
+                .Where(c => c.ContentEmbedding != null ||
+                           c.HeaderContextEmbedding != null ||
+                           c.NotesEmbedding != null ||
+                           c.DetailsEmbedding != null)
+                .ToListAsync();
+
+            // Calculate similarity scores in memory using cosine similarity
+            var scoredChunks = new List<(DocumentChunk chunk, double score)>();
+
+            foreach (var chunk in chunks)
+            {
+                var similarities = new List<double>();
+
+                // Check Content embedding
+                if (chunk.ContentEmbedding != null)
+                {
+                    var embVector = ConvertByteArrayToFloatArray(chunk.ContentEmbedding.Embedding);
+                    similarities.Add(CosineSimilarity(queryVector, embVector));
+                }
+
+                // Check HeaderContext embedding
+                if (chunk.HeaderContextEmbedding != null)
+                {
+                    var embVector = ConvertByteArrayToFloatArray(chunk.HeaderContextEmbedding.Embedding);
+                    similarities.Add(CosineSimilarity(queryVector, embVector));
+                }
+
+                // Check Notes embedding
+                if (chunk.NotesEmbedding != null)
+                {
+                    var embVector = ConvertByteArrayToFloatArray(chunk.NotesEmbedding.Embedding);
+                    similarities.Add(CosineSimilarity(queryVector, embVector));
+                }
+
+                // Check Details embedding
+                if (chunk.DetailsEmbedding != null)
+                {
+                    var embVector = ConvertByteArrayToFloatArray(chunk.DetailsEmbedding.Embedding);
+                    similarities.Add(CosineSimilarity(queryVector, embVector));
+                }
+
+                // Use maximum similarity across all fields
+                if (similarities.Any())
+                {
+                    scoredChunks.Add((chunk, similarities.Max()));
+                }
+            }
+
+            // Sort by similarity (highest first) and take top results
+            var topChunks = scoredChunks
+                .OrderByDescending(x => x.score)
+                .Take(maxResults)
+                .ToList();
+
+            _logger.LogInformation("Vector search found {Count} chunks, top score: {TopScore:F3}",
+                topChunks.Count,
+                topChunks.FirstOrDefault().score);
+
+            return topChunks.Select(x => new ChatSource
+            {
+                DocumentId = x.chunk.DocumentId,
+                DocumentName = x.chunk.Document.FileName,
+                DocumentPath = x.chunk.Document.Path,
+                Content = x.chunk.Content,
+                HeaderContext = x.chunk.HeaderContext,
+                Notes = x.chunk.Notes,
+                Details = x.chunk.Details,
+                SimilarityScore = x.score
+            }).ToList();
         }
         catch (Exception ex)
         {

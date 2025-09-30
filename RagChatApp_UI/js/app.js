@@ -439,6 +439,11 @@ function addMessageToChat(content, sender, sources = [], searchQuery = '') {
                                 <strong>${escapeHtml(source.documentName)}</strong>
                                 ${source.headerContext ? `• ${escapeHtml(source.headerContext)}` : ''}
                                 <span class="source-score">(Score: ${source.similarityScore.toFixed(2)})</span>
+                                ${source.documentPath ? `
+                                    <button class="btn-link" onclick="openDocument('${escapeHtml(source.documentPath).replace(/\\/g, '\\\\')}')" title="Apri documento">
+                                        📂 Apri
+                                    </button>
+                                ` : ''}
                             </div>
                             <div class="source-content ${isLong ? 'collapsible' : ''}" data-source-index="${index}">
                                 <div class="content-text">
@@ -753,3 +758,85 @@ window.addEventListener('unhandledrejection', function(e) {
         showToast('Network error: Unable to connect to the server. Please check if the API server is running.', 'error');
     }
 });
+
+// Document Opening Function
+function openDocument(documentPath) {
+    if (!documentPath) {
+        showToast('Document path not available', 'warning');
+        return;
+    }
+
+    // For Windows file paths, convert to file:// URL
+    let fileUrl = documentPath;
+
+    // Check if it's a Windows path (contains backslashes or starts with drive letter)
+    if (documentPath.includes('\\') || /^[A-Za-z]:/.test(documentPath)) {
+        // Convert Windows path to file:// URL
+        fileUrl = 'file:///' + documentPath.replace(/\\/g, '/');
+    }
+
+    // Try to open the document
+    try {
+        // Attempt 1: Open in new window/tab
+        const opened = window.open(fileUrl, '_blank');
+
+        if (!opened || opened.closed || typeof opened.closed === 'undefined') {
+            // Popup was blocked, show alternative
+            showDocumentPathDialog(documentPath);
+        } else {
+            showToast('Opening document...', 'info');
+        }
+    } catch (error) {
+        console.error('Error opening document:', error);
+        showDocumentPathDialog(documentPath);
+    }
+}
+
+// Show dialog with document path for manual opening
+function showDocumentPathDialog(documentPath) {
+    const message = `Il browser non può aprire direttamente i file locali. Percorso del documento:\n\n${documentPath}\n\nCopia il percorso e aprilo con il tuo file explorer.`;
+
+    if (confirm(message + '\n\nVuoi copiare il percorso negli appunti?')) {
+        copyToClipboard(documentPath);
+    }
+}
+
+// Copy text to clipboard
+function copyToClipboard(text) {
+    // Modern API
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => {
+            showToast('Percorso copiato negli appunti!', 'success');
+        }).catch(err => {
+            console.error('Failed to copy:', err);
+            fallbackCopyToClipboard(text);
+        });
+    } else {
+        fallbackCopyToClipboard(text);
+    }
+}
+
+// Fallback clipboard copy for older browsers
+function fallbackCopyToClipboard(text) {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+            showToast('Percorso copiato negli appunti!', 'success');
+        } else {
+            showToast('Impossibile copiare. Copia manualmente il percorso.', 'error');
+        }
+    } catch (err) {
+        console.error('Fallback copy failed:', err);
+        showToast('Impossibile copiare. Copia manualmente il percorso.', 'error');
+    }
+
+    document.body.removeChild(textArea);
+}

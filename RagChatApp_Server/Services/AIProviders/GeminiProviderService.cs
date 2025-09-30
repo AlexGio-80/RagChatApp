@@ -86,14 +86,19 @@ public class GeminiProviderService : IAIProviderService
             var model = GetModelForTask(taskType);
             var url = $"{model}:generateContent?key={_settings.Gemini.ApiKey}";
 
-            var requestBody = new
+            // Extract system message if present and convert to systemInstruction
+            var systemMessage = messages.FirstOrDefault(m => m.Role == "system");
+            var userMessages = messages.Where(m => m.Role != "system").ToList();
+
+            // Build request body with systemInstruction support
+            var requestBody = new Dictionary<string, object>
             {
-                contents = messages.Select(m => new
+                ["contents"] = userMessages.Select(m => new
                 {
-                    role = m.Role == "assistant" ? "model" : m.Role,
+                    role = m.Role == "assistant" ? "model" : "user",
                     parts = new[] { new { text = m.Content } }
                 }).ToArray(),
-                generationConfig = new
+                ["generationConfig"] = new
                 {
                     temperature = temperature,
                     topP = _settings.Gemini.GenerationConfig.TopP,
@@ -101,6 +106,15 @@ public class GeminiProviderService : IAIProviderService
                     maxOutputTokens = maxTokens ?? _settings.Gemini.MaxTokens
                 }
             };
+
+            // Add system instruction if present
+            if (systemMessage != null)
+            {
+                requestBody["systemInstruction"] = new
+                {
+                    parts = new[] { new { text = systemMessage.Content } }
+                };
+            }
 
             var json = JsonSerializer.Serialize(requestBody);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
