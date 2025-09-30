@@ -34,14 +34,41 @@ builder.Services.AddCors(options =>
 // Register custom services
 builder.Services.AddScoped<IDocumentProcessingService, DocumentProcessingService>();
 
-// Register AI provider services
-builder.Services.AddHttpClient<OpenAIProviderService>();
-builder.Services.AddHttpClient<GeminiProviderService>();
-builder.Services.AddHttpClient<AzureOpenAIProviderService>();
+// Register AI provider services with HttpClient
+// Configure HttpClient for each provider with proper BaseAddress
+builder.Services.AddHttpClient<OpenAIProviderService>((serviceProvider, client) =>
+{
+    var config = serviceProvider.GetRequiredService<IConfiguration>();
+    var baseUrl = config["AIProvider:OpenAI:BaseUrl"] ?? "https://api.openai.com/v1";
+    var apiKey = config["AIProvider:OpenAI:ApiKey"] ?? "";
 
-builder.Services.AddScoped<OpenAIProviderService>();
-builder.Services.AddScoped<GeminiProviderService>();
-builder.Services.AddScoped<AzureOpenAIProviderService>();
+    // Ensure BaseUrl ends with / for proper relative path concatenation
+    if (!baseUrl.EndsWith("/"))
+    {
+        baseUrl += "/";
+    }
+
+    client.BaseAddress = new Uri(baseUrl);
+    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+builder.Services.AddHttpClient<GeminiProviderService>((serviceProvider, client) =>
+{
+    var config = serviceProvider.GetRequiredService<IConfiguration>();
+    var baseUrl = config["AIProvider:Gemini:BaseUrl"] ?? "https://generativelanguage.googleapis.com/v1beta";
+
+    // Ensure BaseUrl ends with / for proper relative path concatenation
+    if (!baseUrl.EndsWith("/"))
+    {
+        baseUrl += "/";
+    }
+
+    client.BaseAddress = new Uri(baseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+builder.Services.AddHttpClient<AzureOpenAIProviderService>();
 
 builder.Services.AddScoped<AIProviderFactory>();
 

@@ -24,14 +24,7 @@ public class GeminiProviderService : IAIProviderService
         _httpClient = httpClient;
         _logger = logger;
 
-        ConfigureHttpClient();
-    }
-
-    private void ConfigureHttpClient()
-    {
-        var config = _settings.Gemini;
-        _httpClient.BaseAddress = new Uri(config.BaseUrl.TrimEnd('/') + '/');
-        _httpClient.Timeout = TimeSpan.FromSeconds(config.TimeoutSeconds);
+        // HttpClient is now configured in Program.cs via AddHttpClient
     }
 
     public async Task<float[]> GenerateEmbeddingAsync(string text, AITaskType taskType = AITaskType.Embedding)

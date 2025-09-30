@@ -19,20 +19,20 @@ public class DocumentsController : ControllerBase
     private readonly RagChatDbContext _context;
     private readonly IDocumentProcessingService _documentService;
     private readonly IAIProviderService _aiService;
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
 
     public DocumentsController(
         ILogger<DocumentsController> logger,
         RagChatDbContext context,
         IDocumentProcessingService documentService,
         IAIProviderService aiService,
-        IServiceProvider serviceProvider)
+        IServiceScopeFactory serviceScopeFactory)
     {
         _logger = logger;
         _context = context;
         _documentService = documentService;
         _aiService = aiService;
-        _serviceProvider = serviceProvider;
+        _serviceScopeFactory = serviceScopeFactory;
     }
 
     /// <summary>
@@ -75,8 +75,20 @@ public class DocumentsController : ControllerBase
             _context.Documents.Add(document);
             await _context.SaveChangesAsync();
 
-            // Process document in background with metadata
-            _ = Task.Run(async () => await ProcessDocumentAsync(document.Id, request.Notes, request.Details));
+            _logger.LogInformation("Document saved with ID: {DocumentId}, starting background processing", document.Id);
+
+            // Process document in background with metadata - with proper error logging
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await ProcessDocumentAsync(document.Id, request.Notes, request.Details);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Background processing failed for document {DocumentId}", document.Id);
+                }
+            });
 
             var response = new DocumentResponse
             {
@@ -313,7 +325,7 @@ public class DocumentsController : ControllerBase
     private async Task ProcessDocumentAsync(int documentId, string? notes = null, string? details = null)
     {
         // Create a new scope for background processing to avoid disposed context issues
-        using var scope = _serviceProvider.CreateScope();
+        using var scope = _serviceScopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<RagChatDbContext>();
         var documentService = scope.ServiceProvider.GetRequiredService<IDocumentProcessingService>();
         var aiService = scope.ServiceProvider.GetRequiredService<IAIProviderService>();

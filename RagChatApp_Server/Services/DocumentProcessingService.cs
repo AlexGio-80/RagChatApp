@@ -55,18 +55,22 @@ public class DocumentProcessingService : IDocumentProcessingService
     /// <summary>
     /// Splits document content into chunks based on headers and size limits
     /// </summary>
-    public async Task<List<DocumentChunk>> CreateChunksAsync(string content, int maxChunkSize = 1000, string? notes = null, string? details = null, string fileName = "")
+    public Task<List<DocumentChunk>> CreateChunksAsync(string content, int maxChunkSize = 1000, string? notes = null, string? details = null, string fileName = "")
     {
-        _logger.LogInformation("Creating chunks from content of length: {Length}", content.Length);
+        _logger.LogInformation("Creating chunks from content of length: {Length}, fileName: {FileName}", content.Length, fileName);
 
         var chunks = new List<DocumentChunk>();
         var chunkIndex = 0;
         var extension = Path.GetExtension(fileName).ToLowerInvariant();
 
+        _logger.LogInformation("File extension detected: {Extension}", extension);
+
         // For markdown and text files, try to use header-based chunking
         if (extension == ".md" || extension == ".txt")
         {
             var sections = SplitByHeaders(content);
+            _logger.LogInformation("Split into {SectionCount} sections for header-based chunking", sections.Count);
+            
             if (sections.Count > 1)
             {
                 foreach (var section in sections)
@@ -91,7 +95,7 @@ public class DocumentProcessingService : IDocumentProcessingService
                     }
                 }
                 _logger.LogInformation("Created {ChunkCount} chunks using header-based splitting", chunks.Count);
-                return chunks;
+                return Task.FromResult(chunks);
             }
         }
 
@@ -102,11 +106,12 @@ public class DocumentProcessingService : IDocumentProcessingService
             if (structuredChunks.Any())
             {
                 _logger.LogInformation("Created {ChunkCount} chunks using PDF structure", structuredChunks.Count);
-                return structuredChunks;
+                return Task.FromResult(structuredChunks);
             }
         }
 
         // Fallback to fixed-size chunking for files without clear structure
+        _logger.LogInformation("Using fixed-size chunking as fallback");
         var fixedChunks = SplitLongText(content, maxChunkSize - 100, 100);
         foreach (var chunk in fixedChunks)
         {
@@ -114,7 +119,7 @@ public class DocumentProcessingService : IDocumentProcessingService
         }
 
         _logger.LogInformation("Created {ChunkCount} chunks using fixed-size splitting", chunks.Count);
-        return chunks;
+        return Task.FromResult(chunks);
     }
 
     /// <summary>

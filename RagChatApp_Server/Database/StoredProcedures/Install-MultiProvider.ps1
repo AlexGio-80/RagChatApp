@@ -19,7 +19,7 @@ param(
     [string]$AzureOpenAIEndpoint = ""
 )
 
-Write-Host "🚀 RAG Chat Application - Multi-Provider AI Installation" -ForegroundColor Green
+Write-Host "RAG Chat Application - Multi-Provider AI Installation" -ForegroundColor Green
 Write-Host "=========================================================" -ForegroundColor Green
 Write-Host "Server: $ServerName" -ForegroundColor Cyan
 Write-Host "Database: $DatabaseName" -ForegroundColor Cyan
@@ -38,7 +38,7 @@ if ($AuthenticationType -eq "Integrated") {
 
 try {
     # Test connection
-    Write-Host "🔗 Testing database connection..." -ForegroundColor Yellow
+    Write-Host "Testing database connection..." -ForegroundColor Yellow
 
     $Connection = New-Object System.Data.SqlClient.SqlConnection($ConnectionString)
     $Connection.Open()
@@ -48,8 +48,9 @@ try {
     $TestResult = $TestCommand.ExecuteReader()
 
     if ($TestResult.Read()) {
-        Write-Host "✅ Connected to database: $($TestResult['DatabaseName'])" -ForegroundColor Green
-        Write-Host "   SQL Server: $($TestResult['SQLVersion'].ToString().Split("`n")[0])" -ForegroundColor Gray
+        Write-Host "Connected to database: $($TestResult['DatabaseName'])" -ForegroundColor Green
+        $versionInfo = $TestResult['SQLVersion'].ToString().Split("`n")[0]
+        Write-Host "   SQL Server: $versionInfo" -ForegroundColor Gray
     }
     $TestResult.Close()
     $Connection.Close()
@@ -66,7 +67,7 @@ try {
         $ScriptPath = Join-Path $ScriptDir $ScriptFile
 
         if (Test-Path $ScriptPath) {
-            Write-Host "📜 Executing $ScriptFile..." -ForegroundColor Cyan
+            Write-Host "Executing $ScriptFile..." -ForegroundColor Cyan
 
             $SqlContent = Get-Content $ScriptPath -Raw
             $SqlContent = $SqlContent -replace "USE \[OSL_AI\]", "USE [$DatabaseName]"
@@ -88,7 +89,7 @@ try {
                         $Result = $Command.ExecuteNonQuery()
                         $BatchCount++
                     } catch {
-                        Write-Host "❌ Error executing batch in $ScriptFile`: $($_.Exception.Message)" -ForegroundColor Red
+                        Write-Host "Error executing batch in $ScriptFile : $($_.Exception.Message)" -ForegroundColor Red
                         $Connection.Close()
                         throw
                     }
@@ -96,15 +97,15 @@ try {
             }
 
             $Connection.Close()
-            Write-Host "   ✅ $ScriptFile completed ($BatchCount batches)" -ForegroundColor Green
+            Write-Host "   $ScriptFile completed ($BatchCount batches)" -ForegroundColor Green
         } else {
-            Write-Host "   ❌ File not found: $ScriptFile" -ForegroundColor Red
+            Write-Host "   File not found: $ScriptFile" -ForegroundColor Red
         }
     }
 
     # Verify installation
     Write-Host ""
-    Write-Host "🔍 Verifying multi-provider installation..." -ForegroundColor Cyan
+    Write-Host "Verifying multi-provider installation..." -ForegroundColor Cyan
 
     $Connection = New-Object System.Data.SqlClient.SqlConnection($ConnectionString)
     $Connection.Open()
@@ -124,13 +125,13 @@ try {
     $Connection.Close()
 
     Write-Host ""
-    Write-Host "🎉 Multi-Provider AI installation completed successfully!" -ForegroundColor Green
+    Write-Host "Multi-Provider AI installation completed successfully!" -ForegroundColor Green
     Write-Host "   Multi-provider procedures installed: $ProcCount" -ForegroundColor Green
 
     # Run tests if requested
     if ($TestAfterInstall -and ($OpenAIApiKey -or $GeminiApiKey -or $AzureOpenAIApiKey)) {
         Write-Host ""
-        Write-Host "🧪 Running post-installation tests..." -ForegroundColor Cyan
+        Write-Host "Running post-installation tests..." -ForegroundColor Cyan
 
         $Connection = New-Object System.Data.SqlClient.SqlConnection($ConnectionString)
         $Connection.Open()
@@ -161,9 +162,9 @@ try {
                 $error = if ($TestResults["ErrorMessage"] -eq [System.DBNull]::Value) { "" } else { $TestResults["ErrorMessage"] }
 
                 if ($success) {
-                    Write-Host "   ✅ $provider`: SUCCESS" -ForegroundColor Green
+                    Write-Host "   SUCCESS: $provider" -ForegroundColor Green
                 } else {
-                    Write-Host "   ❌ $provider`: FAILED - $error" -ForegroundColor Red
+                    Write-Host "   FAILED: $provider - $error" -ForegroundColor Red
                 }
             }
             $TestResults.Close()
@@ -179,34 +180,32 @@ try {
             $WorkflowCommand.CommandTimeout = 180
             $WorkflowCommand.ExecuteNonQuery()
 
-            Write-Host "   ✅ Workflow test completed" -ForegroundColor Green
+            Write-Host "   Workflow test completed" -ForegroundColor Green
         }
 
         $Connection.Close()
     }
 
     Write-Host ""
-    Write-Host "📖 Available Multi-Provider Procedures:" -ForegroundColor Cyan
-    Write-Host "   • SP_GenerateEmbedding_MultiProvider - Generate embeddings with any provider" -ForegroundColor Gray
-    Write-Host "   • SP_RAGSearch_MultiProvider - Enhanced RAG search with multi-provider" -ForegroundColor Gray
-    Write-Host "   • SP_TestAllProviders - Test all configured providers" -ForegroundColor Gray
-    Write-Host "   • SP_TestMultiProviderWorkflow - Complete workflow testing" -ForegroundColor Gray
-    Write-Host "   • SP_GetBestAvailableProvider - Intelligent provider selection" -ForegroundColor Gray
+    Write-Host "Available Multi-Provider Procedures:" -ForegroundColor Cyan
+    Write-Host "   - SP_GenerateEmbedding_MultiProvider - Generate embeddings with any provider" -ForegroundColor Gray
+    Write-Host "   - SP_RAGSearch_MultiProvider - Enhanced RAG search with multi-provider" -ForegroundColor Gray
+    Write-Host "   - SP_TestAllProviders - Test all configured providers" -ForegroundColor Gray
+    Write-Host "   - SP_TestMultiProviderWorkflow - Complete workflow testing" -ForegroundColor Gray
+    Write-Host "   - SP_GetBestAvailableProvider - Intelligent provider selection" -ForegroundColor Gray
     Write-Host ""
-    Write-Host "📋 Usage Examples:" -ForegroundColor Cyan
-    Write-Host "   -- Test OpenAI provider:" -ForegroundColor Gray
-    Write-Host "   DECLARE @embedding VARBINARY(MAX);" -ForegroundColor Gray
-    Write-Host "   EXEC SP_GenerateEmbedding_MultiProvider @Text='test', @Provider='OpenAI', @ApiKey='your-key', @Embedding=@embedding OUTPUT;" -ForegroundColor Gray
+    Write-Host "Usage Examples:" -ForegroundColor Cyan
+    Write-Host ('   DECLARE @embedding VARBINARY(MAX);') -ForegroundColor Gray
+    Write-Host ('   EXEC SP_GenerateEmbedding_MultiProvider @Text=''test'', @Provider=''OpenAI'', @ApiKey=''your-key'', @Embedding=@embedding OUTPUT;') -ForegroundColor Gray
     Write-Host ""
-    Write-Host "   -- Run complete workflow test:" -ForegroundColor Gray
-    Write-Host "   EXEC SP_TestMultiProviderWorkflow @OpenAIApiKey='your-openai-key';" -ForegroundColor Gray
+    Write-Host ('   EXEC SP_TestMultiProviderWorkflow @OpenAIApiKey=''your-openai-key'';') -ForegroundColor Gray
     Write-Host ""
 
 } catch {
     Write-Host ""
-    Write-Host "❌ Installation failed: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Installation failed: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host ""
-    Write-Host "💡 Troubleshooting tips:" -ForegroundColor Yellow
+    Write-Host "Troubleshooting tips:" -ForegroundColor Yellow
     Write-Host "   1. Verify server name and database name are correct" -ForegroundColor Gray
     Write-Host "   2. Ensure you have proper permissions on the database" -ForegroundColor Gray
     Write-Host "   3. Check that the base RAG Chat procedures are already installed" -ForegroundColor Gray

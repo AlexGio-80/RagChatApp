@@ -34,6 +34,11 @@ public class Document
     public long Size { get; set; }
 
     /// <summary>
+    /// Size of the document in bytes (alias for FileSize used in SQL scripts)
+    /// </summary>
+    public long FileSize => Size;
+
+    /// <summary>
     /// Full text content extracted from the document
     /// </summary>
     [Required]
@@ -44,6 +49,12 @@ public class Document
     /// </summary>
     [MaxLength(500)]
     public string? Path { get; set; }
+
+    /// <summary>
+    /// User who uploaded the document
+    /// </summary>
+    [MaxLength(255)]
+    public string? UploadedBy { get; set; }
 
     /// <summary>
     /// Date and time when the document was uploaded
@@ -61,6 +72,16 @@ public class Document
     [Required]
     [MaxLength(50)]
     public string Status { get; set; } = "Pending";
+
+    /// <summary>
+    /// Processing status of the document (alias for ProcessingStatus used in SQL scripts)
+    /// </summary>
+    public string ProcessingStatus => Status;
+
+    /// <summary>
+    /// Optional notes about the document
+    /// </summary>
+    public string? Notes { get; set; }
 
     /// <summary>
     /// Collection of chunks created from this document

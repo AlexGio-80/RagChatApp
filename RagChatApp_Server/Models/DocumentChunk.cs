@@ -108,6 +108,12 @@ public class DocumentChunkContentEmbedding
     public byte[] Embedding { get; set; } = Array.Empty<byte>();
 
     /// <summary>
+    /// AI model used to generate this embedding
+    /// </summary>
+    [MaxLength(100)]
+    public string? Model { get; set; }
+
+    /// <summary>
     /// Date and time when this embedding was created
     /// </summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -146,6 +152,12 @@ public class DocumentChunkHeaderContextEmbedding
     /// </summary>
     [Required]
     public byte[] Embedding { get; set; } = Array.Empty<byte>();
+
+    /// <summary>
+    /// AI model used to generate this embedding
+    /// </summary>
+    [MaxLength(100)]
+    public string? Model { get; set; }
 
     /// <summary>
     /// Date and time when this embedding was created
@@ -188,6 +200,12 @@ public class DocumentChunkNotesEmbedding
     public byte[] Embedding { get; set; } = Array.Empty<byte>();
 
     /// <summary>
+    /// AI model used to generate this embedding
+    /// </summary>
+    [MaxLength(100)]
+    public string? Model { get; set; }
+
+    /// <summary>
     /// Date and time when this embedding was created
     /// </summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -226,6 +244,12 @@ public class DocumentChunkDetailsEmbedding
     /// </summary>
     [Required]
     public byte[] Embedding { get; set; } = Array.Empty<byte>();
+
+    /// <summary>
+    /// AI model used to generate this embedding
+    /// </summary>
+    [MaxLength(100)]
+    public string? Model { get; set; }
 
     /// <summary>
     /// Date and time when this embedding was created

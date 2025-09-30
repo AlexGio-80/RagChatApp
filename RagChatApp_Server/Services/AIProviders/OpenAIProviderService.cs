@@ -24,21 +24,12 @@ public class OpenAIProviderService : IAIProviderService
         _httpClient = httpClient;
         _logger = logger;
 
-        ConfigureHttpClient();
-    }
-
-    private void ConfigureHttpClient()
-    {
-        var config = _settings.OpenAI;
-        _httpClient.BaseAddress = new Uri(config.BaseUrl);
-        _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {config.ApiKey}");
-
-        if (!string.IsNullOrEmpty(config.OrganizationId))
+        // HttpClient is now configured in Program.cs via AddHttpClient
+        // Add optional Organization header if configured
+        if (!string.IsNullOrEmpty(_settings.OpenAI.OrganizationId))
         {
-            _httpClient.DefaultRequestHeaders.Add("OpenAI-Organization", config.OrganizationId);
+            _httpClient.DefaultRequestHeaders.Add("OpenAI-Organization", _settings.OpenAI.OrganizationId);
         }
-
-        _httpClient.Timeout = TimeSpan.FromSeconds(config.TimeoutSeconds);
     }
 
     public async Task<float[]> GenerateEmbeddingAsync(string text, AITaskType taskType = AITaskType.Embedding)
@@ -46,8 +37,27 @@ public class OpenAIProviderService : IAIProviderService
         try
         {
             _logger.LogInformation("Generating embedding using OpenAI for task: {TaskType}", taskType);
+            _logger.LogInformation("HttpClient BaseAddress: {BaseAddress}", _httpClient.BaseAddress?.ToString() ?? "NULL!");
+
+            // If BaseAddress is null, configure it here as fallback
+            if (_httpClient.BaseAddress == null)
+            {
+                _logger.LogWarning("HttpClient BaseAddress is NULL! Configuring manually...");
+                var baseUrl = _settings.OpenAI.BaseUrl;
+                if (!baseUrl.EndsWith("/"))
+                {
+                    baseUrl += "/";
+                }
+                _httpClient.BaseAddress = new Uri(baseUrl);
+                if (!_httpClient.DefaultRequestHeaders.Contains("Authorization"))
+                {
+                    _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_settings.OpenAI.ApiKey}");
+                }
+            }
 
             var model = GetModelForTask(taskType);
+            _logger.LogInformation("Using model: {Model}, Full URL: {FullUrl}", model, new Uri(_httpClient.BaseAddress, "embeddings"));
+
             var requestBody = new
             {
                 input = text,
@@ -58,6 +68,14 @@ public class OpenAIProviderService : IAIProviderService
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
             var response = await _httpClient.PostAsync("embeddings", content);
+            _logger.LogInformation("Response status: {StatusCode}", response.StatusCode);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogError("OpenAI API Error: {StatusCode} - {Content}", response.StatusCode, errorContent);
+            }
+
             response.EnsureSuccessStatusCode();
 
             var responseContent = await response.Content.ReadAsStringAsync();

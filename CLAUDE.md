@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 RagChatApp - An advanced RAG (Retrieval-Augmented Generation) chat application that allows users to upload documents and chat with AI using the content as context. The system features multi-field embedding search, intelligent document processing, and comprehensive SQL interface alongside REST API.
 
-**Latest Update**: January 29, 2025 - Enhanced with multi-field embeddings, PdfPig integration, and complete SQL stored procedure interface.
+**Latest Update**: September 30, 2025 - Fixed multi-provider AI system HttpClient configuration for proper URL path handling with OpenAI and Gemini providers.
 
 ## Architecture
 
@@ -227,9 +227,11 @@ for i in {1..20}; do curl -X POST "http://localhost:5000/api/your-secured-endpoi
 
 **❌ DEPLOYMENT BLOCKED** if any checklist item is not verified.
 
-## 🤖 Multi-Provider AI System (NEW - v1.2.0)
+## 🤖 Multi-Provider AI System (v1.2.1 - FIXED)
 
-The application now features a complete multi-provider AI system supporting OpenAI, Google Gemini, and Azure OpenAI with dynamic switching and configuration-driven selection.
+The application features a complete multi-provider AI system supporting OpenAI, Google Gemini, and Azure OpenAI with dynamic switching and configuration-driven selection.
+
+**Recent Fix (Sept 30, 2025)**: Resolved HttpClient URL path concatenation issues where BaseAddress configuration was not properly handling trailing slashes, causing 404 errors with OpenAI and Gemini API endpoints.
 
 ### 🔄 Supported AI Providers
 - **OpenAI**: GPT models and text-embedding-3-small
@@ -267,6 +269,27 @@ EXEC SP_GenerateEmbedding_MultiProvider
 
 -- Test all configured providers
 EXEC SP_TestMultiProviderWorkflow;
+```
+
+### 🔧 HttpClient Configuration (Important!)
+The multi-provider system uses proper HttpClient configuration in `Program.cs`:
+- **BaseAddress must end with `/`** for correct URL path concatenation
+- **Relative paths must NOT start with `/`** (use `"embeddings"` not `"/embeddings"`)
+- Configuration is done via `AddHttpClient<T>()` with lambda configuration
+- Each provider service receives a pre-configured HttpClient instance
+
+**Example (OpenAI)**:
+```csharp
+builder.Services.AddHttpClient<OpenAIProviderService>((serviceProvider, client) =>
+{
+    var baseUrl = config["AIProvider:OpenAI:BaseUrl"]; // "https://api.openai.com/v1"
+    if (!baseUrl.EndsWith("/")) baseUrl += "/";
+    client.BaseAddress = new Uri(baseUrl); // Results in "https://api.openai.com/v1/"
+    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+});
+
+// In service: await _httpClient.PostAsync("embeddings", content);
+// Results in: https://api.openai.com/v1/embeddings ✅
 ```
 
 ## 🗄️ SQL Interface (ENHANCED)

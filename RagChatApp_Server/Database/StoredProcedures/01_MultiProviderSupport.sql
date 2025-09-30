@@ -408,7 +408,7 @@ BEGIN
 
     BEGIN TRY
         -- Insert document record
-        INSERT INTO Documents (FileName, ContentType, FileSize, Content, UploadedBy, UploadedAt, ProcessingStatus, Notes)
+        INSERT INTO Documents (FileName, ContentType, Size, Content, UploadedBy, UploadedAt, Status, Notes)
         VALUES (@FileName, @ContentType, @FileSize, @Content, @UploadedBy, GETUTCDATE(), @ProcessingStatus, @Notes);
 
         SET @DocumentId = SCOPE_IDENTITY();
@@ -482,7 +482,7 @@ BEGIN
 
         -- Update document status
         UPDATE Documents
-        SET ProcessingStatus = 'Completed', ProcessedAt = GETUTCDATE()
+        SET Status = 'Completed', ProcessedAt = GETUTCDATE()
         WHERE Id = @DocumentId;
 
         COMMIT TRANSACTION;
