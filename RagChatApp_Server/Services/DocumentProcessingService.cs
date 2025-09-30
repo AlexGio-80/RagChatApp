@@ -99,13 +99,13 @@ public class DocumentProcessingService : IDocumentProcessingService
             }
         }
 
-        // For PDF files, try to identify structure first
-        if (extension == ".pdf")
+        // For PDF and Word files, try to identify structure first
+        if (extension == ".pdf" || extension == ".docx" || extension == ".doc")
         {
             var structuredChunks = TryExtractPdfStructure(content, notes, details, ref chunkIndex);
             if (structuredChunks.Any())
             {
-                _logger.LogInformation("Created {ChunkCount} chunks using PDF structure", structuredChunks.Count);
+                _logger.LogInformation("Created {ChunkCount} chunks using document structure for {Extension}", structuredChunks.Count, extension);
                 return Task.FromResult(structuredChunks);
             }
         }
@@ -144,18 +144,98 @@ public class DocumentProcessingService : IDocumentProcessingService
             using var document = PdfDocument.Open(stream);
             var content = new StringBuilder();
 
+            _logger.LogInformation("Extracting PDF with {PageCount} pages", document.NumberOfPages);
+
             foreach (var page in document.GetPages())
             {
-                var pageText = page.Text;
-                if (!string.IsNullOrWhiteSpace(pageText))
+                try
                 {
-                    // Normalize text: remove excessive whitespace and line breaks
-                    pageText = NormalizeText(pageText);
-                    content.AppendLine(pageText);
+                    var pageText = page.Text;
+                    if (string.IsNullOrWhiteSpace(pageText))
+                    {
+                        _logger.LogDebug("Page {PageNum} has no text content", page.Number);
+                        continue;
+                    }
+
+                    // Get words for analysis
+                    var words = page.GetWords().ToList();
+                    _logger.LogDebug("Page {PageNum} has {WordCount} words", page.Number, words.Count);
+
+                    // Try to detect headers by font size if words available
+                    if (words.Any())
+                    {
+                        // Group words into lines based on Y position (with tolerance for slight variations)
+                        var wordsByLine = words
+                            .GroupBy(w => Math.Round(w.BoundingBox.Bottom, 0))
+                            .OrderByDescending(g => g.Key)
+                            .ToList();
+
+                        _logger.LogDebug("Page {PageNum} has {LineCount} lines", page.Number, wordsByLine.Count);
+
+                        var lines = new List<string>();
+                        foreach (var lineGroup in wordsByLine)
+                        {
+                            var lineWords = lineGroup.OrderBy(w => w.BoundingBox.Left).ToList();
+                            var lineText = string.Join(" ", lineWords.Select(w => w.Text)).Trim();
+                            
+                            if (string.IsNullOrWhiteSpace(lineText)) continue;
+
+                            // Calculate average font size for this line
+                            var avgFontSize = lineWords
+                                .SelectMany(w => w.Letters)
+                                .Where(l => l != null)
+                                .Select(l => l.PointSize)
+                                .DefaultIfEmpty(0)
+                                .Average();
+
+                            // Check if any word in line is bold
+                            var hasBoldText = lineWords
+                                .SelectMany(w => w.Letters)
+                                .Any(l => l?.FontName?.ToLower().Contains("bold") == true);
+
+                            // Mark potential headers (larger font or bold, and not too long)
+                            if ((avgFontSize > 12 || hasBoldText) && lineText.Length < 150)
+                            {
+                                _logger.LogInformation("Potential header on page {Page}: '{Text}' (size: {Size:F1}pt, bold: {Bold})", 
+                                    page.Number, lineText.Substring(0, Math.Min(60, lineText.Length)), avgFontSize, hasBoldText);
+                                
+                                // Add markers to help header detection
+                                lines.Add($"[HEADER_CANDIDATE] {lineText}");
+                            }
+                            else
+                            {
+                                lines.Add(lineText);
+                            }
+                        }
+
+                        content.AppendLine(string.Join("\n", lines));
+                    }
+                    else
+                    {
+                        // Fallback to simple text extraction
+                        _logger.LogDebug("Using fallback text extraction for page {PageNum}", page.Number);
+                        content.AppendLine(NormalizeText(pageText));
+                    }
+
+                    content.AppendLine(); // Blank line between pages
+                }
+                catch (Exception pageEx)
+                {
+                    _logger.LogWarning(pageEx, "Error processing page {PageNum}, using fallback extraction", page.Number);
+                    // Fallback to simple text
+                    var pageText = page.Text;
+                    if (!string.IsNullOrWhiteSpace(pageText))
+                    {
+                        content.AppendLine(NormalizeText(pageText));
+                    }
                 }
             }
 
-            return content.ToString();
+            var extractedText = content.ToString();
+            _logger.LogInformation("Extracted {Length} characters from PDF with {Pages} pages", 
+                extractedText.Length, document.NumberOfPages);
+            
+            return extractedText;
         }
         catch (Exception ex)
         {
@@ -168,29 +248,111 @@ public class DocumentProcessingService : IDocumentProcessingService
     {
         var content = new StringBuilder();
 
-        using var stream = file.OpenReadStream();
-        using var document = WordprocessingDocument.Open(stream, false);
-
-        if (document.MainDocumentPart?.Document.Body != null)
+        try
         {
+            using var stream = file.OpenReadStream();
+            using var document = WordprocessingDocument.Open(stream, false);
+
+            if (document.MainDocumentPart?.Document.Body == null)
+            {
+                _logger.LogWarning("Word document {FileName} has no body content", file.FileName);
+                return string.Empty;
+            }
+
+            _logger.LogInformation("Extracting Word document with style analysis: {FileName}", file.FileName);
+            int headersFound = 0;
+
             foreach (var element in document.MainDocumentPart.Document.Body.Elements())
             {
                 if (element is Paragraph paragraph)
                 {
-                    content.AppendLine(paragraph.InnerText);
+                    var text = paragraph.InnerText?.Trim();
+                    if (string.IsNullOrWhiteSpace(text))
+                        continue;
+
+                    // Check paragraph style to detect headers
+                    var styleId = paragraph.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
+                    bool isHeader = false;
+                    
+                    // Common Word heading styles
+                    if (!string.IsNullOrEmpty(styleId))
+                    {
+                        var styleLower = styleId.ToLower();
+                        isHeader = styleLower.Contains("heading") || 
+                                   styleLower.Contains("title") ||
+                                   styleLower.StartsWith("h1") ||
+                                   styleLower.StartsWith("h2") ||
+                                   styleLower.StartsWith("h3") ||
+                                   styleLower.StartsWith("h4") ||
+                                   styleLower.StartsWith("h5") ||
+                                   styleLower.StartsWith("h6");
+                    }
+
+                    // Also check for bold and large font as header indicators
+                    if (!isHeader && text.Length < 150)
+                    {
+                        var runs = paragraph.Elements<Run>().ToList();
+                        if (runs.Any())
+                        {
+                            // Check if text is bold
+                            bool isBold = runs.Any(r => 
+                                r.RunProperties?.Bold?.Val?.Value == true ||
+                                r.RunProperties?.Bold != null);
+
+                            // Check font size (if larger than typical body text)
+                            var fontSize = runs
+                                .Select(r => r.RunProperties?.FontSize?.Val?.Value)
+                                .Where(fs => fs != null)
+                                .Select(fs => int.TryParse(fs, out int size) ? size : 0)
+                                .FirstOrDefault();
+
+                            // Font size in Word is in half-points (e.g., "24" = 12pt)
+                            // Body text is typically 22 (11pt), headers are 24+ (12pt+)
+                            if (isBold || fontSize > 22)
+                            {
+                                isHeader = true;
+                            }
+                        }
+                    }
+
+                    if (isHeader)
+                    {
+                        headersFound++;
+                        _logger.LogInformation("Word header detected (style: '{Style}'): '{Text}'", 
+                            styleId ?? "formatting-based", 
+                            text.Substring(0, Math.Min(60, text.Length)));
+                        content.AppendLine($"[HEADER_CANDIDATE] {text}");
+                    }
+                    else
+                    {
+                        content.AppendLine(text);
+                    }
                 }
                 else if (element is Table table)
                 {
+                    _logger.LogDebug("Processing table with {RowCount} rows", table.Elements<TableRow>().Count());
                     foreach (var row in table.Elements<TableRow>())
                     {
-                        var rowText = string.Join("\t", row.Elements<TableCell>().Select(cell => cell.InnerText));
-                        content.AppendLine(rowText);
+                        var rowText = string.Join("\t", row.Elements<TableCell>().Select(cell => cell.InnerText?.Trim()));
+                        if (!string.IsNullOrWhiteSpace(rowText))
+                        {
+                            content.AppendLine(rowText);
+                        }
                     }
                 }
             }
-        }
 
-        return content.ToString();
+            var extractedText = content.ToString();
+            _logger.LogInformation("Extracted {Length} characters from Word document with {HeaderCount} headers detected", 
+                extractedText.Length, headersFound);
+
+            return extractedText;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error extracting text from Word document {FileName}", file.FileName);
+            throw new InvalidOperationException($"Failed to extract text from Word document: {ex.Message}", ex);
+        }
     }
 
     /// <summary>
@@ -327,37 +489,54 @@ public class DocumentProcessingService : IDocumentProcessingService
 
     private List<DocumentChunk> TryExtractPdfStructure(string text, string? notes, string? details, ref int chunkIndex)
     {
+        _logger.LogInformation("Attempting to extract PDF structure from text of length: {Length}", text.Length);
         var chunks = new List<DocumentChunk>();
 
         // Try to identify sections based on common PDF patterns
         var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        _logger.LogInformation("Split text into {LineCount} lines", lines.Length);
+        
         var currentSection = new StringBuilder();
         string? currentHeader = null;
+        int headersFound = 0;
 
         foreach (var line in lines)
         {
             var trimmedLine = line.Trim();
+            
+            if (string.IsNullOrWhiteSpace(trimmedLine))
+                continue;
 
             // Simple heuristic for identifying headers in PDFs
             if (IsLikelyPdfHeader(trimmedLine))
             {
+                headersFound++;
+                
                 // Save previous section
                 if (currentSection.Length > 0)
                 {
                     var content = currentSection.ToString().Trim();
                     if (!string.IsNullOrWhiteSpace(content))
                     {
+                        _logger.LogDebug("Creating chunk {Index} with header: '{Header}', content length: {ContentLength}", 
+                            chunkIndex, currentHeader ?? "(none)", content.Length);
                         chunks.Add(CreateDocumentChunk(chunkIndex++, content, currentHeader, notes, details));
                     }
                 }
 
-                // Start new section
-                currentHeader = trimmedLine;
+                // Start new section - remove marker if present
+                currentHeader = trimmedLine.Replace("[HEADER_CANDIDATE]", "").Trim();
                 currentSection.Clear();
+                _logger.LogDebug("Starting new section with header: {Header}", currentHeader);
             }
             else
             {
-                currentSection.AppendLine(trimmedLine);
+                // Also remove marker from content lines (shouldn't happen but just in case)
+                var cleanLine = trimmedLine.Replace("[HEADER_CANDIDATE]", "").Trim();
+                if (!string.IsNullOrWhiteSpace(cleanLine))
+                {
+                    currentSection.AppendLine(cleanLine);
+                }
             }
         }
 
@@ -367,28 +546,109 @@ public class DocumentProcessingService : IDocumentProcessingService
             var content = currentSection.ToString().Trim();
             if (!string.IsNullOrWhiteSpace(content))
             {
+                _logger.LogDebug("Creating final chunk {Index} with header: '{Header}', content length: {ContentLength}", 
+                    chunkIndex, currentHeader ?? "(none)", content.Length);
                 chunks.Add(CreateDocumentChunk(chunkIndex++, content, currentHeader, notes, details));
             }
         }
 
+        _logger.LogInformation("Found {HeaderCount} headers, created {ChunkCount} chunks", headersFound, chunks.Count);
+        
         // If we found meaningful structure, return it
         if (chunks.Count > 1 && chunks.Any(c => !string.IsNullOrEmpty(c.HeaderContext)))
         {
+            _logger.LogInformation("Successfully extracted PDF structure with {ChunkCount} chunks and {HeaderCount} headers", 
+                chunks.Count, headersFound);
             return chunks;
         }
 
+        _logger.LogInformation("No meaningful PDF structure found (chunks: {ChunkCount}, headers: {HeaderCount})", 
+            chunks.Count, headersFound);
         return new List<DocumentChunk>();
     }
 
     private bool IsLikelyPdfHeader(string line)
     {
-        if (string.IsNullOrWhiteSpace(line) || line.Length > 100)
+        if (string.IsNullOrWhiteSpace(line))
             return false;
 
-        // Common patterns for PDF headers
-        return Regex.IsMatch(line, @"^(\d+\.?\s+|\w+\.?\s+)?[A-Z][^.!?]*$") ||
-               Regex.IsMatch(line, @"^\d+\.\d+(\.\d+)?\s+[A-Z]") ||
-               line.All(c => char.IsUpper(c) || char.IsWhiteSpace(c) || char.IsDigit(c) || c == '.');
+        var trimmedLine = line.Trim();
+
+        // Check for our marker from PDF extraction
+        if (trimmedLine.StartsWith("[HEADER_CANDIDATE]"))
+        {
+            _logger.LogDebug("Header detected by PDF font analysis: {Line}", trimmedLine.Replace("[HEADER_CANDIDATE]", "").Trim());
+            return true;
+        }
+
+        // Skip lines that are too long to be headers
+        if (trimmedLine.Length > 200)
+        {
+            _logger.LogTrace("Line too long ({Length}) to be header: {Line}", trimmedLine.Length, trimmedLine.Substring(0, Math.Min(50, trimmedLine.Length)));
+            return false;
+        }
+
+        // Skip lines with excessive dots (table of contents formatting)
+        if (trimmedLine.Count(c => c == '.') > 5)
+        {
+            _logger.LogTrace("Too many dots in line, likely TOC: {Line}", trimmedLine.Substring(0, Math.Min(50, trimmedLine.Length)));
+            return false;
+        }
+
+        // Pattern 1: Numbered headers: "1. Title", "1.2 Title", "1.2.3 Title"
+        if (Regex.IsMatch(trimmedLine, @"^\d+(\.\d+)*\.?\s+\w+"))
+        {
+            _logger.LogDebug("Detected numbered header: {Line}", trimmedLine);
+            return true;
+        }
+
+        // Pattern 2: All caps headers: "INTRODUCTION", "CHAPTER 1"
+        if (trimmedLine.Length >= 3 && trimmedLine.All(c => char.IsUpper(c) || char.IsWhiteSpace(c) || char.IsDigit(c) || c == '.' || c == ':' || c == '-' || c == '\'' || c == '(' || c == ')'))
+        {
+            _logger.LogDebug("Detected all-caps header: {Line}", trimmedLine);
+            return true;
+        }
+
+        // Pattern 3: Title case - starts with capital, relatively short
+        if (trimmedLine.Length <= 100 && trimmedLine.Length > 0 && char.IsUpper(trimmedLine[0]))
+        {
+            // Check if it looks like a sentence (ends with period, exclamation, question mark)
+            if (trimmedLine.TrimEnd().EndsWith(".") || trimmedLine.TrimEnd().EndsWith("!") || trimmedLine.TrimEnd().EndsWith("?"))
+            {
+                _logger.LogTrace("Looks like a sentence (ends with punctuation): {Line}", trimmedLine);
+                return false;
+            }
+
+            // Split into words
+            var words = trimmedLine.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            
+            // Headers are usually short (2-10 words)
+            if (words.Length >= 2 && words.Length <= 10)
+            {
+                int capitalizedWords = words.Count(w => w.Length > 0 && char.IsUpper(w[0]));
+                
+                // More lenient: at least 30% capitalized (good for Italian)
+                if (capitalizedWords >= Math.Max(1, words.Length * 0.3))
+                {
+                    _logger.LogDebug("Detected title-case header ({CapWords}/{TotalWords} capitalized): {Line}", 
+                        capitalizedWords, words.Length, trimmedLine);
+                    return true;
+                }
+                else
+                {
+                    _logger.LogTrace("Not enough capitalized words ({CapWords}/{TotalWords}): {Line}", 
+                        capitalizedWords, words.Length, trimmedLine);
+                }
+            }
+            else if (words.Length == 1 && trimmedLine.Length >= 3)
+            {
+                // Single word starting with capital, likely a header
+                _logger.LogDebug("Detected single-word header: {Line}", trimmedLine);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private List<string> SplitLongText(string text, int maxChunkSize = 750, int overlap = 100)
