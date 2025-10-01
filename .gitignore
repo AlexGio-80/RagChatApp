@@ -215,6 +215,11 @@ CSharpUpgradeLog*.XML
 *.ldf
 *.ndf
 
+# SQL Server Encryption Certificates and Keys (SECURITY - DO NOT COMMIT!)
+*.cer
+*.pvk
+**/Backup/
+
 # Business Intelligence projects
 *.rdl.data
 *.bim.layout

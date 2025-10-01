@@ -45,7 +45,7 @@ BEGIN
             SET @url = ISNULL(@BaseUrl, 'https://api.openai.com/v1') + '/embeddings';
             SET @headers = '{"Content-Type": "application/json", "Authorization": "Bearer ' + @ApiKey + '"}';
             SET @payload = N'{
-                "input": ' + STRING_ESCAPE(@Text, 'json') + ',
+                "input": "' + STRING_ESCAPE(@Text, 'json') + '",
                 "model": "' + @Model + '",
                 "encoding_format": "base64"
             }';
@@ -55,7 +55,7 @@ BEGIN
             SET @url = RTRIM(@BaseUrl, '/') + '/openai/deployments/' + @DeploymentName + '/embeddings?api-version=' + @ApiVersion;
             SET @headers = '{"Content-Type": "application/json", "api-key": "' + @ApiKey + '"}';
             SET @payload = N'{
-                "input": ' + STRING_ESCAPE(@Text, 'json') + '
+                "input": "' + STRING_ESCAPE(@Text, 'json') + '"
             }';
         END
         ELSE IF @Provider = 'Gemini'
@@ -64,7 +64,7 @@ BEGIN
             SET @headers = '{"Content-Type": "application/json"}';
             SET @payload = N'{
                 "content": {
-                    "parts": [{"text": ' + STRING_ESCAPE(@Text, 'json') + '}]
+                    "parts": [{"text": "' + STRING_ESCAPE(@Text, 'json') + '"}]
                 }
             }';
         END
@@ -88,23 +88,33 @@ BEGIN
         BEGIN
             DECLARE @embeddingData NVARCHAR(MAX);
 
+            -- Debug: Print first 500 chars of response
+            PRINT 'API Response (first 500 chars): ' + LEFT(@response, 500);
+
             -- Parse response based on provider
+            -- Note: sp_invoke_external_rest_endpoint wraps the response in $.result
             IF @Provider = 'OpenAI' OR @Provider = 'AzureOpenAI'
             BEGIN
-                SET @embeddingData = JSON_VALUE(@response, '$.data[0].embedding');
+                SET @embeddingData = JSON_VALUE(@response, '$.result.data[0].embedding');
             END
             ELSE IF @Provider = 'Gemini'
             BEGIN
                 -- Gemini returns embedding in different format
-                SET @embeddingData = JSON_QUERY(@response, '$.embedding.values');
+                SET @embeddingData = JSON_QUERY(@response, '$.result.embedding.values');
             END
+
+            -- Debug: Print embedding data info
+            PRINT 'Embedding Data Length: ' + CAST(ISNULL(LEN(@embeddingData), 0) AS NVARCHAR);
+            IF @embeddingData IS NOT NULL
+                PRINT 'Embedding Data (first 200 chars): ' + LEFT(@embeddingData, 200);
 
             -- Convert to binary format
             IF @embeddingData IS NOT NULL AND @embeddingData != ''
             BEGIN
                 IF @Provider = 'Gemini'
                 BEGIN
-                    -- For Gemini, convert array to binary format
+                    -- For Gemini, convert JSON array string to binary format
+                    -- The embedding data is already a JSON array string like "[0.1, 0.2, ...]"
                     SET @Embedding = CONVERT(VARBINARY(MAX), @embeddingData);
                 END
                 ELSE
@@ -115,6 +125,8 @@ BEGIN
             END
             ELSE
             BEGIN
+                DECLARE @debugMsg NVARCHAR(MAX) = 'Failed to extract embedding. Response: ' + LEFT(@response, 1000);
+                PRINT @debugMsg;
                 THROW 50002, 'Failed to extract embedding from API response', 1;
             END
         END
@@ -523,4 +535,11 @@ PRINT 'EXEC SP_GenerateEmbedding_MultiProvider @Text = ''test'', @Provider = ''O
 PRINT '';
 PRINT '-- Test all providers:';
 PRINT 'EXEC SP_TestAllProviders @OpenAIApiKey = ''your-openai-key'', @GeminiApiKey = ''your-gemini-key'';';
+PRINT '';
+PRINT '========================================';
+PRINT 'NEXT STEPS:';
+PRINT 'Run the following scripts for complete installation:';
+PRINT '1. 04_SimplifiedRAGProcedures.sql - Simple RAG procedures for LLM integration';
+PRINT '2. 04b_SimplifiedRAGProcedures_WithApiKey.sql - RAG procedures with API key parameters';
+PRINT '========================================';
 PRINT '';

@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-RagChatApp - An advanced RAG (Retrieval-Augmented Generation) chat application that allows users to upload documents and chat with AI using the content as context. The system features multi-field embedding search, intelligent document processing, and comprehensive SQL interface alongside REST API.
+RagChatApp - An advanced RAG (Retrieval-Augmented Generation) chat application that allows users to upload documents and chat with AI using the content as context. The system features multi-field embedding search, intelligent document processing, comprehensive SQL interface alongside REST API, and **AES-256 encrypted API key storage**.
 
-**Latest Update**: September 30, 2025 - Implemented cosine similarity vector search with multi-field embeddings and added document opening feature in chat interface.
+**Latest Update**: October 1, 2025 - Implemented AES-256 encryption for API keys with automated PowerShell installer, fixed multi-provider SQL procedures, and enhanced security infrastructure.
 
 ## Architecture
 
@@ -27,6 +27,8 @@ RagChatApp - An advanced RAG (Retrieval-Augmented Generation) chat application t
 - **Cosine Similarity Vector Search**: In-memory vector search with multi-field embedding support, proper similarity scoring
 - **Document Opening from Chat**: Click-to-open document feature in chat sources with clipboard fallback
 - **Dual Interface**: Complete REST API + SQL stored procedures for external access
+- **🔐 AES-256 Encrypted API Keys**: Automatic encryption with SQL Server built-in security (NEW v1.3.1)
+- **Automated Installer**: PowerShell script for one-command setup with encryption
 - **Semantic Caching**: 1-hour TTL caching system for improved performance
 - **Configurable Search**: MaxChunksForLLM parameter (default 10, max 50)
 - **Enhanced Metadata**: Document paths, user notes, JSON details support
@@ -311,6 +313,67 @@ POST /api/aiprovider/test/all               # Test all providers
 GET  /api/info                              # Enhanced with provider info
 ```
 
+### 🔐 Encrypted API Key Storage (v1.3.1 - NEW)
+
+**API keys are automatically encrypted using AES-256** and stored securely in the database.
+
+#### Security Features
+- **AES-256 Encryption**: SQL Server built-in encryption with Certificate and Symmetric Key
+- **Automatic Encryption**: API keys encrypted on insert/update via `SP_UpsertProviderConfiguration`
+- **Controlled Decryption**: Only authorized stored procedures can decrypt keys
+- **Safe Views**: `vw_AIProviderConfiguration` shows masked keys (`***ENCRYPTED***`)
+- **Disaster Recovery**: Certificate backup support for key recovery
+
+#### Encryption Hierarchy
+```
+Database Master Key (Password Protected)
+    └── Certificate (RagApiKeyCertificate)
+        └── Symmetric Key (RagApiKeySymmetricKey, AES-256)
+            └── Encrypted API Keys (VARBINARY)
+```
+
+#### Usage Examples
+```sql
+-- Insert/Update provider with encrypted API key (automatic encryption)
+EXEC SP_UpsertProviderConfiguration
+    @ProviderName = 'Gemini',
+    @ApiKey = 'AIzaSy-your-actual-api-key',
+    @BaseUrl = 'https://generativelanguage.googleapis.com/v1beta',
+    @Model = 'models/embedding-001';
+
+-- View configurations (keys masked)
+SELECT * FROM vw_AIProviderConfiguration;
+-- Output: ApiKeyStatus = '***ENCRYPTED***', HasApiKey = 1
+
+-- Use in RAG procedures (automatic decryption)
+EXEC SP_GetDataForLLM_Gemini
+    @SearchText = 'your query',
+    @TopK = 10;
+-- Behind the scenes: key is decrypted, used for API call, never logged
+```
+
+#### ⚠️ CRITICAL: Backup Certificate
+```sql
+-- Backup certificate immediately after installation!
+BACKUP CERTIFICATE RagApiKeyCertificate
+    TO FILE = 'C:\Backup\RagApiKeyCertificate.cer'
+    WITH PRIVATE KEY (
+        FILE = 'C:\Backup\RagApiKeyCertificate.pvk',
+        ENCRYPTION BY PASSWORD = 'YourSecureBackupPassword123!'
+    );
+```
+
+**Without certificate backup**: If the certificate is lost, all encrypted API keys become **permanently unrecoverable**. Store backups in:
+- Azure Key Vault (recommended for production)
+- Encrypted secure file share
+- Offline secure location
+- **NEVER in source control** (`.cer` and `.pvk` files are in `.gitignore`)
+
+#### Documentation
+- **Installation Guide**: `RagChatApp_Server/Database/StoredProcedures/README_Installation.md`
+- **Encryption Guide**: `RagChatApp_Server/Database/StoredProcedures/ENCRYPTION_UPGRADE_GUIDE.md`
+- **Cleanup Script**: `00_CleanupEncryption.sql` (for reinstallation)
+
 ### 🗄️ Database Multi-Provider Support
 ```sql
 -- Generate embedding with specific provider
@@ -403,6 +466,25 @@ EXEC SP_SearchSemanticCache @SearchQuery = 'deep learning', @ExactMatch = 1;
 
 ### 🔧 SQL Interface Installation
 
+**Recommended: Use PowerShell Installer (Automated)**:
+```powershell
+cd RagChatApp_Server/Database/StoredProcedures
+
+# Install with encrypted API key configuration
+.\Install-MultiProvider-Fixed.ps1 `
+    -GeminiApiKey "your-gemini-api-key" `
+    -OpenAIApiKey "your-openai-api-key" `
+    -TestAfterInstall
+```
+
+This automatically:
+- ✅ Creates AES-256 encryption infrastructure
+- ✅ Installs all multi-provider procedures
+- ✅ Installs simplified RAG procedures
+- ✅ Encrypts and stores API keys securely
+- ✅ Runs post-installation tests
+
+**Manual Installation** (if needed):
 1. **Run Migrations First**:
    ```bash
    cd RagChatApp_Server

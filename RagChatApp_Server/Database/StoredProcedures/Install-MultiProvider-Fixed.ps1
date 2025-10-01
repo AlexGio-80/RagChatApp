@@ -109,7 +109,7 @@ function Execute-SqlScript {
         $Connection = New-Object System.Data.SqlClient.SqlConnection($ConnectionString)
         $Connection.Open()
 
-        # Capture PRINT messages (register once for the connection)
+        # Register InfoMessage handler once for the connection
         $InfoMessageHandler = {
             param($sender, $e)
             Write-Host "      $($e.Message)" -ForegroundColor DarkGray
@@ -139,6 +139,8 @@ function Execute-SqlScript {
             }
         }
 
+        # Remove the handler before closing
+        $Connection.remove_InfoMessage($InfoMessageHandler)
         $Connection.Close()
         Write-Host "    Completed: $SuccessCount/$BatchCount batches successful" -ForegroundColor Green
         return $true
@@ -160,7 +162,29 @@ function Install-EncryptedConfiguration {
     $EncryptionScript = Join-Path $ScriptDir "06_EncryptedConfiguration.sql"
 
     if (Test-Path $EncryptionScript) {
-        Execute-SqlScript -ScriptPath $EncryptionScript -ConnectionString $ConnectionString -DatabaseName $DatabaseName
+        $Result = Execute-SqlScript -ScriptPath $EncryptionScript -ConnectionString $ConnectionString -DatabaseName $DatabaseName
+
+        if ($Result) {
+            # Wait a moment for all objects to be fully committed
+            Start-Sleep -Milliseconds 500
+
+            # Verify that the stored procedure exists before continuing
+            $Connection = New-Object System.Data.SqlClient.SqlConnection($ConnectionString)
+            $Connection.Open()
+
+            $CheckCommand = $Connection.CreateCommand()
+            $CheckCommand.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_NAME = 'SP_UpsertProviderConfiguration'"
+            $ProcExists = $CheckCommand.ExecuteScalar()
+
+            $Connection.Close()
+
+            if ($ProcExists -eq 0) {
+                Write-Host "   WARNING: SP_UpsertProviderConfiguration not found. Encryption installation may have failed." -ForegroundColor Yellow
+                return $false
+            }
+        }
+
+        return $Result
     } else {
         Write-Host "   WARNING: Encryption script not found. Creating basic table..." -ForegroundColor Yellow
 
@@ -213,25 +237,26 @@ function Insert-ProviderConfiguration {
     $Connection = New-Object System.Data.SqlClient.SqlConnection($ConnectionString)
     $Connection.Open()
 
+    # Register InfoMessage handler once for the connection
+    $InfoMessageHandler = {
+        param($sender, $e)
+        Write-Host "      $($e.Message)" -ForegroundColor DarkGray
+    }
+    $Connection.add_InfoMessage($InfoMessageHandler)
+
     try {
         # Use the stored procedure that handles encryption
         $UpsertCommand = $Connection.CreateCommand()
         $UpsertCommand.CommandText = "SP_UpsertProviderConfiguration"
         $UpsertCommand.CommandType = [System.Data.CommandType]::StoredProcedure
 
-        $UpsertCommand.Parameters.AddWithValue("@ProviderName", $ProviderName)
-        $UpsertCommand.Parameters.AddWithValue("@ApiKey", $(if ($ApiKey) { $ApiKey } else { [System.DBNull]::Value }))
-        $UpsertCommand.Parameters.AddWithValue("@BaseUrl", $(if ($BaseUrl) { $BaseUrl } else { [System.DBNull]::Value }))
-        $UpsertCommand.Parameters.AddWithValue("@Model", $(if ($Model) { $Model } else { [System.DBNull]::Value }))
-        $UpsertCommand.Parameters.AddWithValue("@DeploymentName", $(if ($DeploymentName) { $DeploymentName } else { [System.DBNull]::Value }))
-        $UpsertCommand.Parameters.AddWithValue("@ApiVersion", $(if ($ApiVersion) { $ApiVersion } else { [System.DBNull]::Value }))
-        $UpsertCommand.Parameters.AddWithValue("@IsActive", 1)
-
-        # Capture PRINT messages
-        $Connection.InfoMessage += {
-            param($sender, $e)
-            Write-Host "      $($e.Message)" -ForegroundColor DarkGray
-        }
+        [void]$UpsertCommand.Parameters.AddWithValue("@ProviderName", $ProviderName)
+        [void]$UpsertCommand.Parameters.AddWithValue("@ApiKey", $(if ($ApiKey) { $ApiKey } else { [System.DBNull]::Value }))
+        [void]$UpsertCommand.Parameters.AddWithValue("@BaseUrl", $(if ($BaseUrl) { $BaseUrl } else { [System.DBNull]::Value }))
+        [void]$UpsertCommand.Parameters.AddWithValue("@Model", $(if ($Model) { $Model } else { [System.DBNull]::Value }))
+        [void]$UpsertCommand.Parameters.AddWithValue("@DeploymentName", $(if ($DeploymentName) { $DeploymentName } else { [System.DBNull]::Value }))
+        [void]$UpsertCommand.Parameters.AddWithValue("@ApiVersion", $(if ($ApiVersion) { $ApiVersion } else { [System.DBNull]::Value }))
+        [void]$UpsertCommand.Parameters.AddWithValue("@IsActive", 1)
 
         $Reader = $UpsertCommand.ExecuteReader()
         if ($Reader.Read()) {
@@ -245,6 +270,8 @@ function Insert-ProviderConfiguration {
         Write-Host "   [ERROR] Error configuring $ProviderName : $($_.Exception.Message)" -ForegroundColor Red
     }
     finally {
+        # Remove the handler before closing
+        $Connection.remove_InfoMessage($InfoMessageHandler)
         $Connection.Close()
     }
 }
@@ -314,10 +341,16 @@ try {
     # =============================================
     if (-not $SkipConfiguration) {
         Write-Host "Step 5: Installing encrypted configuration system..." -ForegroundColor Cyan
-        Install-EncryptedConfiguration -ConnectionString $ConnectionString -DatabaseName $DatabaseName -ScriptDir $ScriptDir
+        $EncryptionResult = Install-EncryptedConfiguration -ConnectionString $ConnectionString -DatabaseName $DatabaseName -ScriptDir $ScriptDir
         Write-Host ""
 
-        Write-Host "   Configuring AI providers with encrypted keys..." -ForegroundColor Yellow
+        if ($EncryptionResult) {
+            Write-Host "   Configuring AI providers with encrypted keys..." -ForegroundColor Yellow
+        } else {
+            Write-Host "   WARNING: Skipping provider configuration due to encryption installation issues" -ForegroundColor Yellow
+            Write-Host ""
+            return
+        }
 
         # OpenAI
         Insert-ProviderConfiguration `
