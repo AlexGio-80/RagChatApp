@@ -67,7 +67,7 @@ BEGIN
             ProcessedAt DATETIME2
         );
 
-        -- Search content embeddings
+        -- Search content embeddings using CLR cosine similarity
         INSERT INTO #SearchResults
         SELECT TOP (@TopK)
             d.Id,
@@ -77,8 +77,8 @@ BEGIN
             dc.HeaderContext,
             dc.Notes,
             dc.Details,
-            -- Simulate similarity scoring (replace with actual vector distance when available)
-            (ABS(CHECKSUM(NEWID())) % 80 + 20) / 100.0 AS Similarity,
+            -- Use CLR function for accurate cosine similarity
+            dbo.fn_CosineSimilarity(ce.Embedding, @QueryEmbedding) AS Similarity,
             'Content' AS SearchType,
             dc.ChunkIndex,
             d.UploadedBy,
@@ -87,7 +87,9 @@ BEGIN
         FROM Documents d
         INNER JOIN DocumentChunks dc ON d.Id = dc.DocumentId
         INNER JOIN DocumentChunkContentEmbeddings ce ON dc.Id = ce.DocumentChunkId
-        WHERE ce.Embedding IS NOT NULL -- Basic check for embedding presence
+        WHERE ce.Embedding IS NOT NULL
+          AND d.Status = 'Completed'
+          AND dbo.fn_IsValidEmbedding(ce.Embedding) = 1
         ORDER BY Similarity DESC;
 
         -- Search notes embeddings if enabled
@@ -102,8 +104,8 @@ BEGIN
                 dc.HeaderContext,
                 dc.Notes,
                 dc.Details,
-                -- Simulate similarity scoring for notes
-                (ABS(CHECKSUM(NEWID())) % 80 + 20) / 100.0 AS Similarity,
+                -- Use CLR function for accurate cosine similarity
+                dbo.fn_CosineSimilarity(ne.Embedding, @QueryEmbedding) AS Similarity,
                 'Notes' AS SearchType,
                 dc.ChunkIndex,
                 d.UploadedBy,
@@ -113,8 +115,10 @@ BEGIN
             INNER JOIN DocumentChunks dc ON d.Id = dc.DocumentId
             INNER JOIN DocumentChunkNotesEmbeddings ne ON dc.Id = ne.DocumentChunkId
             WHERE dc.Notes IS NOT NULL
-              AND LEN(dc.Notes) > 0
+              AND LEN(LTRIM(RTRIM(dc.Notes))) > 0
               AND ne.Embedding IS NOT NULL
+              AND d.Status = 'Completed'
+              AND dbo.fn_IsValidEmbedding(ne.Embedding) = 1
             ORDER BY Similarity DESC;
         END
 
@@ -130,8 +134,8 @@ BEGIN
                 dc.HeaderContext,
                 dc.Notes,
                 dc.Details,
-                -- Simulate similarity scoring for details
-                (ABS(CHECKSUM(NEWID())) % 80 + 20) / 100.0 AS Similarity,
+                -- Use CLR function for accurate cosine similarity
+                dbo.fn_CosineSimilarity(de.Embedding, @QueryEmbedding) AS Similarity,
                 'Details' AS SearchType,
                 dc.ChunkIndex,
                 d.UploadedBy,
@@ -141,8 +145,10 @@ BEGIN
             INNER JOIN DocumentChunks dc ON d.Id = dc.DocumentId
             INNER JOIN DocumentChunkDetailsEmbeddings de ON dc.Id = de.DocumentChunkId
             WHERE dc.Details IS NOT NULL
-              AND LEN(dc.Details) > 0
+              AND LEN(LTRIM(RTRIM(dc.Details))) > 0
               AND de.Embedding IS NOT NULL
+              AND d.Status = 'Completed'
+              AND dbo.fn_IsValidEmbedding(de.Embedding) = 1
             ORDER BY Similarity DESC;
         END
 
