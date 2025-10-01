@@ -8,7 +8,7 @@
   },
   "AllowedHosts": "*",
   "ConnectionStrings": {
-    "DefaultConnection": "Data Source=DEV-ALEX\\MSSQLSERVER01;Encrypt=False;Integrated Security=True;User ID=OSL\\a.giovanelli;Initial Catalog=OSL_AI"
+    "DefaultConnection": "Data Source=YOUR_SERVER\\INSTANCE;Encrypt=False;Integrated Security=True;User ID=YOUR_DOMAIN\\YOUR_USER;Initial Catalog=OSL_AI"
   },
   "AIProvider": {
     "DefaultProvider": "Gemini",

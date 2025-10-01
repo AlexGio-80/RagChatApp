@@ -336,5 +336,8 @@ RagChatApp_Server/Uploads/
 # Claude Code settings (local only)
 .claude/settings.local.json
 
+# Development settings with local API keys (not tracked)
+**/appsettings.Development.json
+
 # But do track solution files
 !*.sln
