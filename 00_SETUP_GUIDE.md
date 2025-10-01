@@ -271,6 +271,25 @@ Next Steps:
   4. Test RAG search
 ```
 
+### ⚠️ Note: sp_invoke_external_rest_endpoint Not Available
+
+**Important**: The stored procedure `sp_invoke_external_rest_endpoint` is **only available in Azure SQL Database**, not in SQL Server 2016-2024 on-premise installations.
+
+**This is expected behavior and does NOT affect the RAG system functionality.**
+
+**How the system works**:
+1. **Backend Application (.NET)**: Generates embeddings via AI provider HTTP APIs
+2. **SQL Server**: Stores embeddings in VARBINARY columns
+3. **Vector Search**: Performed by CLR functions or native VECTOR operations (SQL 2025)
+4. **External Interface**: `SP_GetDataForLLM_*` procedures work correctly without `sp_invoke_external_rest_endpoint`
+
+**If you see this warning during installation, you can safely ignore it:**
+```
+WARNING: sp_invoke_external_rest_endpoint not available on this SQL Server version
+This is expected for SQL Server 2016-2024 (only available in Azure SQL Database)
+The RAG system will use the .NET backend for embedding generation instead
+```
+
 ### 3.2 Backup Encryption Certificate (CRITICAL!)
 
 **⚠️ DO THIS IMMEDIATELY!** Without the certificate backup, encrypted API keys become permanently unrecoverable if the database or server is lost.
@@ -387,7 +406,7 @@ Installation Complete!
 ============================================
 ```
 
-**📖 Full CLR Documentation**: `CLR/README_CLR_Installation.md`
+**📖 Full CLR Documentation**: `RagChatApp_Server/Database/StoredProcedures/CLR/README_CLR_Installation.md`
 
 ### Option B: VECTOR Installation (SQL Server 2025 RTM+)
 
@@ -409,7 +428,7 @@ cd C:\OSL\Claude\RagChatApp\RagChatApp_Server\Database\StoredProcedures\VECTOR
 2. ✅ Install `SP_RAGSearch_MultiProvider` (VECTOR version using `VECTOR_DISTANCE`)
 3. ✅ Run verification tests
 
-**📖 Full VECTOR Documentation**: `VECTOR/README_VECTOR_Installation.md`
+**📖 Full VECTOR Documentation**: `RagChatApp_Server/Database/StoredProcedures/VECTOR/README_VECTOR_Installation.md`
 
 ### 3.5 Verify Vector Search Installation
 
@@ -737,6 +756,39 @@ RECONFIGURE;
 ALTER DATABASE [OSL_AI] SET TRUSTWORTHY ON;
 ```
 
+### Issue: "Duplicate assembly attribute errors" (CS0579)
+
+**Cause**: Auto-generated assembly info files conflicting with project settings
+
+**Error Example:**
+```
+error CS0579: Duplicate 'System.Reflection.AssemblyCompanyAttribute' attribute
+error CS0579: Duplicate 'global::System.Runtime.Versioning.TargetFrameworkAttribute' attribute
+```
+
+**Solution:**
+```powershell
+# Clean and rebuild
+cd C:\OSL\Claude\RagChatApp\RagChatApp_Server
+dotnet clean
+rm -rf obj bin
+dotnet build
+```
+
+If the problem persists, edit `RagChatApp_Server.csproj` and add these properties:
+```xml
+<PropertyGroup>
+  <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+</PropertyGroup>
+```
+
+### Issue: "sp_invoke_external_rest_endpoint not found"
+
+**Cause**: Using SQL Server 2016-2024 (procedure only available in Azure SQL Database)
+
+**Solution**: This is **expected behavior** and does NOT affect functionality. The RAG system uses the .NET backend for embedding generation instead. No action required.
+
 ### Issue: "API key decryption failed"
 
 **Cause**: Encryption certificate or key not found
@@ -828,12 +880,12 @@ These procedures:
 
 ### 📚 Additional Resources
 
-- **CLR Installation**: `CLR/README_CLR_Installation.md`
-- **VECTOR Installation**: `VECTOR/README_VECTOR_Installation.md`
-- **Simplified RAG API**: `README_SimplifiedRAG.md`
-- **Encryption Details**: `ENCRYPTION_UPGRADE_GUIDE.md`
-- **Architecture**: `/Documentation/ArchitectureDiagram/system-architecture.md`
-- **Database Schema**: `/Documentation/DatabaseSchemas/rag-database-schema.md`
+- **CLR Installation**: `RagChatApp_Server/Database/StoredProcedures/CLR/README_CLR_Installation.md`
+- **VECTOR Installation**: `RagChatApp_Server/Database/StoredProcedures/VECTOR/README_VECTOR_Installation.md`
+- **Simplified RAG API**: `RagChatApp_Server/Database/StoredProcedures/README_SimplifiedRAG.md`
+- **Encryption Details**: `RagChatApp_Server/Database/StoredProcedures/ENCRYPTION_UPGRADE_GUIDE.md`
+- **Architecture**: `Documentation/ArchitectureDiagram/system-architecture.md`
+- **Database Schema**: `Documentation/DatabaseSchemas/rag-database-schema.md`
 
 ---
 
