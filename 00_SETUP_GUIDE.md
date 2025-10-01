@@ -73,7 +73,10 @@ SELECT DB_NAME() AS CurrentDatabase;
 
 ### 1.2 Configure Backend Connection String
 
-Edit `RagChatApp_Server/appsettings.Development.json`:
+**For Production/Testing**: Edit `RagChatApp_Server/appsettings.json`
+**For Local Development Only**: Edit `RagChatApp_Server/appsettings.Development.json`
+
+**Note**: `appsettings.Development.json` is excluded from publish and should only contain your local development settings.
 
 ```json
 {

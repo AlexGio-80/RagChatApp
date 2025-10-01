@@ -7,3 +7,10 @@ non ho capito... la dbo.SP_GetDataForLLM_Gemini (come quelle simili per gli altr
 
 ### Implementazione documentazione per prima installazione e pulizia della solution
 procedi con l'opzione A e se trovi nel mentre documentazione duplicata, file obsoleti o non utili archiviali pure così puliamo anche un po' la soltion
+
+### Correzioni e documentazione dopo prima installazione su database nuovo
+ok, ora farò io un test manuale seguendo 00_SETUP_GUIDE.md, un paio di appunti: 1) la guida di installazione forse andrebbe messa in una posizione più consona nel progetto in modo che una volta che si fa
+ il deploy per l'installazione in produzione sia più facile da trovare. 2) visto che sp_invoke_external_rest_endpoint non è disponibile nelle versioni di SQL Server precedenti alla 2025, forse andrebbe
+indicato in documentazione questa cosa in modo che se non è comunque un problema per l'installazione, chi la fa non deve preoccuparsi di un warning; Se invece la mancanza di
+sp_invoke_external_rest_endpoint è un problema per il funzionamento dell'interfaccia SQL di recupero dei chunck per gli LLM allora va risolto, perché come sappiamo SQL Server 2024 è in RC e per ora
+sicuramente installeremo su versioni precedenti
