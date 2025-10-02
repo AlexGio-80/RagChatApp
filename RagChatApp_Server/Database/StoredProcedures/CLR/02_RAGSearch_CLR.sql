@@ -31,7 +31,7 @@ GO
 CREATE PROCEDURE [dbo].[SP_RAGSearch_MultiProvider]
     @QueryText NVARCHAR(MAX),
     @TopK INT = 10,
-    @SimilarityThreshold FLOAT = 0.7,
+    @SimilarityThreshold FLOAT = 0.6,
     @AIProvider NVARCHAR(50) = 'OpenAI',
     @ApiKey NVARCHAR(255) = NULL,
     @BaseUrl NVARCHAR(500) = NULL,

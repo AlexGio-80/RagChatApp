@@ -36,7 +36,7 @@
    ```powershell
    # Install with encrypted storage
    cd Database/StoredProcedures
-   .\Install-MultiProvider-Fixed.ps1 `
+   .\Install-MultiProvider.ps1 `
        -GeminiApiKey "your-gemini-api-key" `
        -OpenAIApiKey "your-openai-api-key"
    ```
@@ -85,7 +85,7 @@ For development without API keys:
 - Always use the `.template` file as reference
 - Store production keys in:
   - Azure Key Vault (recommended)
-  - Encrypted database (using `Install-MultiProvider-Fixed.ps1`)
+  - Encrypted database (using `Install-MultiProvider.ps1`)
   - Environment variables
 
 ### Getting API Keys
@@ -127,7 +127,7 @@ curl https://localhost:7297/api/info
 - [ ] Update database connection string
 - [ ] Add at least one AI provider API key OR enable MockMode
 - [ ] Run database migrations: `dotnet ef database update`
-- [ ] (Optional) Install encrypted API key storage: `.\Install-MultiProvider-Fixed.ps1`
+- [ ] (Optional) Install encrypted API key storage: `.\Install-MultiProvider.ps1`
 - [ ] Start server: `dotnet run`
 - [ ] Test: `curl https://localhost:7297/health`
 

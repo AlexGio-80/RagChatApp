@@ -147,7 +147,7 @@ DECLARE @QueryEmbedding VARBINARY(MAX) = 0x1234....; -- Your query embedding
 EXEC SP_RAGSearch
     @QueryEmbedding = @QueryEmbedding,
     @MaxResults = 10,
-    @SimilarityThreshold = 0.7,
+    @SimilarityThreshold = 0.6,
     @SearchQuery = 'machine learning algorithms';
 ```
 

@@ -504,6 +504,8 @@ public class AzureOpenAIService : IAzureOpenAIService
         // Simplified fallback search using existing logic
         var chunks = await _context.DocumentChunks
             .Include(c => c.Document)
+            .OrderBy(c => c.DocumentId)
+            .ThenBy(c => c.ChunkIndex)
             .Take(maxResults)
             .ToListAsync();
 

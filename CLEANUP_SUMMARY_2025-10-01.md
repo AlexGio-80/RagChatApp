@@ -28,7 +28,7 @@ Cleaned up and reorganized the StoredProcedures folder to provide a clear, unifi
 **Key Sections**:
 1. Prerequisites (SQL Server, .NET, API keys)
 2. Database initialization via Entity Framework
-3. Base system installation (Install-MultiProvider-Fixed.ps1)
+3. Base system installation (Install-MultiProvider.ps1)
 4. Vector search installation (CLR or VECTOR)
 5. Document import and RAG search testing
 6. Production deployment hardening
@@ -41,7 +41,7 @@ Moved obsolete and duplicate files to `_Archive/`:
 
 ### SQL Scripts Archived
 1. **00_InstallAllStoredProcedures.sql**
-   - **Why**: Superseded by Install-MultiProvider-Fixed.ps1
+   - **Why**: Superseded by Install-MultiProvider.ps1
    - **Issue**: No encryption, manual configuration required
 
 2. **00_InstallAllStoredProcedures_Unified.sql**
@@ -74,7 +74,7 @@ StoredProcedures/
 ├── 📘 README_SimplifiedRAG.md                    Usage guide for simplified interface
 ├── 📘 ENCRYPTION_UPGRADE_GUIDE.md                Encryption implementation details
 │
-├── 🔧 Install-MultiProvider-Fixed.ps1            Base system installer (encryption + multi-provider)
+├── 🔧 Install-MultiProvider.ps1            Base system installer (encryption + multi-provider)
 │
 ├── 📁 CLR/                                       CLR Installation Path
 │   ├── Install-RAG-CLR.ps1                      CLR installer (vector search)
@@ -120,7 +120,7 @@ StoredProcedures/
 
 ### 2. **Separation of Concerns**
 ```
-Base System (Install-MultiProvider-Fixed.ps1)
+Base System (Install-MultiProvider.ps1)
     ├── Multi-provider AI support (OpenAI, Gemini, Azure)
     ├── AES-256 encryption (automatic)
     ├── Document/chunk management
@@ -166,7 +166,7 @@ External Interface (ALWAYS THE SAME)
 ### New Workflow (Clear)
 ```
 1. Read 00_SETUP_GUIDE.md → complete step-by-step guide
-2. Run Install-MultiProvider-Fixed.ps1 → base system + encryption
+2. Run Install-MultiProvider.ps1 → base system + encryption
 3. Choose CLR or VECTOR → clear decision tree
 4. Run CLR/Install-RAG-CLR.ps1 OR VECTOR/Install-RAG-VECTOR.ps1
 5. Test with SP_GetDataForLLM_Gemini → external interface ready

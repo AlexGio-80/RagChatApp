@@ -67,15 +67,7 @@ public class OpenAIProviderService : IAIProviderService
             var json = JsonSerializer.Serialize(requestBody);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            var response = await _httpClient.PostAsync("embeddings", content);
-            _logger.LogInformation("Response status: {StatusCode}", response.StatusCode);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                _logger.LogError("OpenAI API Error: {StatusCode} - {Content}", response.StatusCode, errorContent);
-            }
-
+            var response = await SendWithRetryAsync("embeddings", content);
             response.EnsureSuccessStatusCode();
 
             var responseContent = await response.Content.ReadAsStringAsync();
@@ -120,7 +112,7 @@ public class OpenAIProviderService : IAIProviderService
             var json = JsonSerializer.Serialize(requestBody);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            var response = await _httpClient.PostAsync("chat/completions", content);
+            var response = await SendWithRetryAsync("chat/completions", content);
             response.EnsureSuccessStatusCode();
 
             var responseContent = await response.Content.ReadAsStringAsync();
@@ -140,6 +132,64 @@ public class OpenAIProviderService : IAIProviderService
             _logger.LogError(ex, "Failed to generate chat completion using OpenAI");
             throw;
         }
+    }
+
+    /// <summary>
+    /// Send HTTP request with retry logic for transient failures (502, 503, 429)
+    /// </summary>
+    private async Task<HttpResponseMessage> SendWithRetryAsync(string endpoint, HttpContent content, int maxRetries = 3)
+    {
+        var retryDelays = new[] { 1000, 2000, 4000 }; // Exponential backoff: 1s, 2s, 4s
+
+        for (int attempt = 0; attempt < maxRetries; attempt++)
+        {
+            try
+            {
+                var response = await _httpClient.PostAsync(endpoint, content);
+                _logger.LogInformation("Response status: {StatusCode} (attempt {Attempt}/{Max})",
+                    response.StatusCode, attempt + 1, maxRetries);
+
+                // If success or non-retryable error, return immediately
+                if (response.IsSuccessStatusCode ||
+                    (response.StatusCode != System.Net.HttpStatusCode.BadGateway &&
+                     response.StatusCode != System.Net.HttpStatusCode.ServiceUnavailable &&
+                     response.StatusCode != System.Net.HttpStatusCode.TooManyRequests))
+                {
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var errorContent = await response.Content.ReadAsStringAsync();
+                        _logger.LogError("OpenAI API Error: {StatusCode} - {Content}", response.StatusCode, errorContent);
+                    }
+                    return response;
+                }
+
+                // Log retryable error
+                var retryableError = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("Retryable error {StatusCode} on attempt {Attempt}/{Max}: {Error}",
+                    response.StatusCode, attempt + 1, maxRetries, retryableError);
+
+                // Wait before retry (except on last attempt)
+                if (attempt < maxRetries - 1)
+                {
+                    var delay = retryDelays[attempt];
+                    _logger.LogInformation("Waiting {Delay}ms before retry...", delay);
+                    await Task.Delay(delay);
+                }
+                else
+                {
+                    // Last attempt failed, return the error response
+                    return response;
+                }
+            }
+            catch (HttpRequestException ex) when (attempt < maxRetries - 1)
+            {
+                _logger.LogWarning(ex, "Network error on attempt {Attempt}/{Max}, retrying...", attempt + 1, maxRetries);
+                await Task.Delay(retryDelays[attempt]);
+            }
+        }
+
+        // Should not reach here, but return a failed response as fallback
+        throw new HttpRequestException("Max retry attempts exceeded");
     }
 
     public string GetModelForTask(AITaskType taskType)

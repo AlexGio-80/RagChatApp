@@ -63,6 +63,85 @@ The RAG search system allows you to retrieve relevant document chunks using vect
 - SQL Server 2025 RTM or later with full VECTOR type support
 - ⚠️ **As of October 2025**: SQL Server 2025 is still in RC - use CLR instead
 
+## 🔗 Embedding Compatibility (IMPORTANT)
+
+### How Embeddings Are Stored
+
+The RagChatApp backend generates embeddings in **VARBINARY(MAX)** format using C# `Buffer.BlockCopy`:
+
+```csharp
+// Backend code (DocumentsController.cs)
+private static byte[] ConvertFloatArrayToBytes(float[] floats)
+{
+    var bytes = new byte[floats.Length * 4];
+    Buffer.BlockCopy(floats, 0, bytes, 0, bytes.Length);
+    return bytes;
+}
+```
+
+This creates a **little-endian byte array** stored in the database.
+
+### Compatibility Matrix
+
+| Loading Method | Embedding Format | CLR Compatible | VECTOR Compatible |
+|---------------|------------------|----------------|-------------------|
+| **REST API (C# Backend)** | VARBINARY (Buffer.BlockCopy) | ✅ **YES** - Directly reads VARBINARY | ✅ **YES** - Converts VARBINARY → VECTOR at query time |
+| **SQL Stored Procedures** | VARBINARY (CLR fn_JsonArrayToEmbedding) | ✅ **YES** - Uses same Buffer.BlockCopy | ✅ **YES** - Converts VARBINARY → VECTOR at query time |
+
+### Critical: Embedding Dimensions
+
+Different AI providers generate different embedding dimensions:
+
+- **Google Gemini** (`models/embedding-001`): **768 dimensions** = 3,072 bytes
+- **OpenAI** (`text-embedding-3-small`): **1,536 dimensions** = 6,144 bytes
+
+#### CLR Implementation
+- ✅ **Works with any dimension** - Dynamically handles 768 or 1536 dimensions
+- No configuration needed - automatically adapts to embedding size
+
+#### VECTOR Implementation
+- ⚠️ **Fixed dimension** - Currently configured for `VECTOR(768)` (Gemini)
+- If using OpenAI (1536 dim), you must:
+  1. Run schema migration to add `VECTOR(1536)` columns
+  2. Or continue using CLR (recommended for OpenAI)
+
+### Recommended Approach
+
+**If you load documents via REST API (C# Backend)**:
+- ✅ **Use CLR** - Guaranteed compatibility, no dimension issues
+- ✅ Works with any AI provider (Gemini, OpenAI, Azure OpenAI)
+- ✅ No schema changes needed when switching providers
+
+**If you load documents via SQL stored procedures only**:
+- ✅ **Use CLR** - Same `fn_JsonArrayToEmbedding` function ensures format compatibility
+- ✅ Or use VECTOR if SQL Server 2025 RTM+ and fixed to one provider
+
+**If you plan to use SQL Server 2025 with VECTOR**:
+- Wait for RTM release (currently RC as of October 2025)
+- Ensure VECTOR dimension matches your AI provider:
+  - Gemini → `VECTOR(768)` ✓ (current configuration)
+  - OpenAI → `VECTOR(1536)` ⚠️ (requires migration script)
+
+### Example: Testing Compatibility
+
+```sql
+-- Test that C# embeddings work with CLR
+DECLARE @TestEmb VARBINARY(MAX);
+SELECT TOP 1 @TestEmb = Embedding
+FROM DocumentChunkContentEmbeddings
+WHERE Embedding IS NOT NULL;
+
+-- Test dimension detection
+SELECT dbo.fn_EmbeddingDimension(@TestEmb) AS Dimensions;
+-- Returns: 768 (Gemini) or 1536 (OpenAI)
+
+-- Test self-similarity (should be 1.0)
+SELECT dbo.fn_CosineSimilarity(@TestEmb, @TestEmb) AS SelfSimilarity;
+-- Returns: 1.0 (perfect match)
+```
+
+If self-similarity is **not 1.0**, there is a binary format mismatch. Contact support.
+
 ## 🚀 Quick Start: Interactive Installation
 
 ### Recommended: Use the Interactive Installer
@@ -287,7 +366,7 @@ ORDER BY Similarity DESC;
 EXEC SP_RAGSearch_MultiProvider
     @QueryText = 'your test query',
     @TopK = 5,
-    @SimilarityThreshold = 0.7,
+    @SimilarityThreshold = 0.6,
     @AIProvider = 'Gemini',
     @ApiKey = 'your-api-key-here',
     @IncludeMetadata = 1;
@@ -417,7 +496,7 @@ SELECT COUNT(*) FROM DocumentChunkContentEmbeddings WHERE Embedding IS NOT NULL;
 EXEC SP_RAGSearch_MultiProvider
     @QueryText = 'test',
     @TopK = 5,
-    @SimilarityThreshold = 0.0,  -- Accept any similarity
+    @SimilarityThreshold = 0.5,  -- Lower threshold for testing (default is 0.6)
     @AIProvider = 'Gemini',
     @ApiKey = 'your-key';
 ```

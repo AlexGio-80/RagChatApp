@@ -36,7 +36,7 @@
 - ✅ **Real-time Interface**: Interactive messaging with immediate responses
 - ✅ **Configurable Parameters**:
   - Maximum chunks to include (1-10, default: 5)
-  - Similarity threshold (0.1-1.0, default: 0.7)
+  - Similarity threshold (0.1-1.0, default 0.6)
 - ✅ **Source Display**: Show contributing document chunks with:
   - Document name and header context
   - Similarity score

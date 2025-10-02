@@ -311,7 +311,7 @@ if ($IncludeStoredProcedures) {
     $mainSpPath = "..\..\Database\StoredProcedures"
     if (Test-Path $mainSpPath) {
         Copy-Item "$mainSpPath\00_InstallAllStoredProcedures.sql" -Destination $spPath -ErrorAction SilentlyContinue
-        Copy-Item "$mainSpPath\Install-MultiProvider-Fixed.ps1" -Destination $spPath -ErrorAction SilentlyContinue
+        Copy-Item "$mainSpPath\Install-MultiProvider.ps1" -Destination $spPath -ErrorAction SilentlyContinue
         Copy-Item "$mainSpPath\README.md" -Destination $spPath -ErrorAction SilentlyContinue
         Copy-Item "$mainSpPath\README_Installation_Guide.md" -Destination $spPath -ErrorAction SilentlyContinue
         Copy-Item "$mainSpPath\README_SimplifiedRAG.md" -Destination $spPath -ErrorAction SilentlyContinue
@@ -410,7 +410,7 @@ DeploymentPackage/
 │   ├── 01_DatabaseSchema.sql             # Complete database schema (REQUIRED)
 │   ├── README_DEPLOYMENT.md              # Detailed database deployment guide
 │   ├── StoredProcedures/                 # SQL interface (OPTIONAL)
-│   │   ├── Install-MultiProvider-Fixed.ps1
+│   │   ├── Install-MultiProvider.ps1
 │   │   ├── 00_InstallAllStoredProcedures.sql
 │   │   ├── README.md
 │   │   └── ... (individual procedure files)
@@ -471,7 +471,7 @@ Follow detailed instructions in: \`00_PRODUCTION_SETUP_GUIDE.md\`
 2. Install stored procedures (optional):
    \`\`\`powershell
    cd Database\StoredProcedures
-   .\Install-MultiProvider-Fixed.ps1 -GeminiApiKey "your-key" -TestAfterInstall
+   .\Install-MultiProvider.ps1 -GeminiApiKey "your-key" -TestAfterInstall
    \`\`\`
 3. Deploy application and install service (as above)
 

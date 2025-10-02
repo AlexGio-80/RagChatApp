@@ -77,7 +77,7 @@ Edit `appsettings.json` (or create `appsettings.Production.json`):
 **Note**: In production, use encrypted database storage for API keys:
 ```powershell
 cd Database/StoredProcedures
-.\Install-MultiProvider-Fixed.ps1 `
+.\Install-MultiProvider.ps1 `
     -ServerName "PROD_SERVER\INSTANCE" `
     -DatabaseName "OSL_AI" `
     -GeminiApiKey "your-production-key"

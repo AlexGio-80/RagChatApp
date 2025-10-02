@@ -114,7 +114,7 @@ C:\RagChatApp_Install\
 │   ├── 01_DatabaseSchema.sql             # Complete database schema (REQUIRED)
 │   ├── README_DEPLOYMENT.md              # Detailed database deployment guide
 │   ├── StoredProcedures/                 # SQL interface (OPTIONAL)
-│   │   ├── Install-MultiProvider-Fixed.ps1
+│   │   ├── Install-MultiProvider.ps1
 │   │   ├── 00_InstallAllStoredProcedures.sql
 │   │   ├── README.md
 │   │   └── ... (individual procedure files)
@@ -183,7 +183,7 @@ If you need to access the database directly via SQL procedures (for reporting, e
 **Quick install with PowerShell:**
 ```powershell
 cd Database\StoredProcedures
-.\Install-MultiProvider-Fixed.ps1 `
+.\Install-MultiProvider.ps1 `
     -ServerInstance "YOUR_SERVER\INSTANCE" `
     -DatabaseName "RagChatAppDB" `
     -GeminiApiKey "your-gemini-api-key" `
@@ -193,7 +193,7 @@ cd Database\StoredProcedures
 
 **Example** (using localhost with SQL Express):
 ```powershell
-.\Install-MultiProvider-Fixed.ps1 `
+.\Install-MultiProvider.ps1 `
     -ServerInstance "localhost\SQLEXPRESS" `
     -DatabaseName "RagChatAppDB" `
     -GeminiApiKey "AIzaSy..." `
@@ -303,7 +303,7 @@ USE [RagChatAppDB];
 EXEC SP_RAGSearch_MultiProvider
     @QueryText = 'your search query',
     @TopK = 5,
-    @SimilarityThreshold = 0.7,
+    @SimilarityThreshold = 0.6,
     @AIProvider = 'Gemini',
     @ApiKey = 'your-api-key-here';
 

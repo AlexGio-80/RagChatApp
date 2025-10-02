@@ -96,6 +96,12 @@ BEGIN
     PRINT '  ✓ Dropped existing fn_IsValidEmbedding';
 END
 
+IF OBJECT_ID('dbo.fn_JsonArrayToEmbedding') IS NOT NULL
+BEGIN
+    DROP FUNCTION dbo.fn_JsonArrayToEmbedding;
+    PRINT '  ✓ Dropped existing fn_JsonArrayToEmbedding';
+END
+
 IF EXISTS (SELECT * FROM sys.assemblies WHERE name = 'SqlVectorFunctions')
 BEGIN
     DROP ASSEMBLY SqlVectorFunctions;
@@ -168,10 +174,19 @@ RETURNS BIT
 AS EXTERNAL NAME SqlVectorFunctions.SqlVectorFunctions.IsValidEmbedding;
 GO
 
+-- JSON Array to Embedding (NEW - ensures compatibility with C# backend)
+CREATE FUNCTION dbo.fn_JsonArrayToEmbedding(
+    @jsonArray NVARCHAR(MAX)
+)
+RETURNS VARBINARY(MAX)
+AS EXTERNAL NAME SqlVectorFunctions.SqlVectorFunctions.JsonArrayToEmbedding;
+GO
+
 PRINT '  ✓ fn_CosineSimilarity created';
 PRINT '  ✓ fn_EmbeddingToString created';
 PRINT '  ✓ fn_EmbeddingDimension created';
 PRINT '  ✓ fn_IsValidEmbedding created';
+PRINT '  ✓ fn_JsonArrayToEmbedding created (NEW - for C# format compatibility)';
 GO
 
 PRINT '';

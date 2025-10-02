@@ -157,7 +157,7 @@ DeploymentPackage/
 │   ├── 01_DatabaseSchema.sql              # Idempotent schema script
 │   ├── README_DEPLOYMENT.md
 │   ├── StoredProcedures/
-│   │   ├── Install-MultiProvider-Fixed.ps1
+│   │   ├── Install-MultiProvider.ps1
 │   │   ├── 00_InstallAllStoredProcedures.sql
 │   │   └── ... (individual .sql files)
 │   └── Encryption/

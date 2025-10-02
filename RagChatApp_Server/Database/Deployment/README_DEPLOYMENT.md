@@ -105,7 +105,7 @@ ORDER BY TABLE_NAME;
 # Run PowerShell installer (includes encryption setup)
 cd Database/StoredProcedures
 
-.\Install-MultiProvider-Fixed.ps1 `
+.\Install-MultiProvider.ps1 `
     -GeminiApiKey "your-gemini-api-key" `
     -OpenAIApiKey "your-openai-api-key" `
     -TestAfterInstall

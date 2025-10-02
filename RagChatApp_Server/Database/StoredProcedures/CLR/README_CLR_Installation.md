@@ -244,7 +244,7 @@ ORDER BY Similarity DESC;
 EXEC SP_RAGSearch_MultiProvider
     @QueryText = 'sistema operativo richiesto',
     @TopK = 5,
-    @SimilarityThreshold = 0.7,
+    @SimilarityThreshold = 0.6,
     @AIProvider = 'OpenAI',
     @ApiKey = 'your-api-key-here',
     @IncludeMetadata = 1;

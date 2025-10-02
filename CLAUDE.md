@@ -218,7 +218,7 @@ SELECT * FROM __EFMigrationsHistory ORDER BY MigrationId;
 
 # 2. Install stored procedures with encryption
 cd Database/StoredProcedures
-.\Install-MultiProvider-Fixed.ps1 `
+.\Install-MultiProvider.ps1 `
     -ServerInstance "YOUR_SERVER\INSTANCE" `
     -DatabaseName "RagChatAppDB" `
     -GeminiApiKey "your-key" `
@@ -648,7 +648,7 @@ EXEC SP_SearchSemanticCache @SearchQuery = 'deep learning', @ExactMatch = 1;
 cd RagChatApp_Server/Database/StoredProcedures
 
 # Install with encrypted API key configuration
-.\Install-MultiProvider-Fixed.ps1 `
+.\Install-MultiProvider.ps1 `
     -GeminiApiKey "your-gemini-api-key" `
     -OpenAIApiKey "your-openai-api-key" `
     -TestAfterInstall

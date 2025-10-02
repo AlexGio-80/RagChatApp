@@ -57,7 +57,7 @@ CREATE PROCEDURE [dbo].[SP_GetDataForLLM_OpenAI]
     @IncludeMetadata BIT = 1,
     @SearchNotes BIT = 1,
     @SearchDetails BIT = 1,
-    @SimilarityThreshold FLOAT = 0.7
+    @SimilarityThreshold FLOAT = 0.6
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -126,7 +126,7 @@ CREATE PROCEDURE [dbo].[SP_GetDataForLLM_Gemini]
     @IncludeMetadata BIT = 1,
     @SearchNotes BIT = 1,
     @SearchDetails BIT = 1,
-    @SimilarityThreshold FLOAT = 0.7
+    @SimilarityThreshold FLOAT = 0.6
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -195,7 +195,7 @@ CREATE PROCEDURE [dbo].[SP_GetDataForLLM_AzureOpenAI]
     @IncludeMetadata BIT = 1,
     @SearchNotes BIT = 1,
     @SearchDetails BIT = 1,
-    @SimilarityThreshold FLOAT = 0.7
+    @SimilarityThreshold FLOAT = 0.6
 AS
 BEGIN
     SET NOCOUNT ON;

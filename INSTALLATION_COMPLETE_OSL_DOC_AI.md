@@ -114,7 +114,7 @@ Encryption: AES-256 ✅
 EXEC SP_GetDataForLLM_Gemini
     @SearchText = 'your search query',
     @TopK = 10,
-    @SimilarityThreshold = 0.7;
+    @SimilarityThreshold = 0.6;
 
 -- OpenAI RAG Search
 EXEC SP_GetDataForLLM_OpenAI
@@ -151,7 +151,7 @@ Following `00_SETUP_GUIDE.md`:
    - Reason: SQL Server 2025 VECTOR type not yet available
 
 3. ✅ **Step 3: Base System Installation**
-   - Script: `Install-MultiProvider-Fixed.ps1`
+   - Script: `Install-MultiProvider.ps1`
    - Multi-provider AI support installed
    - AES-256 encryption configured
    - Gemini API key encrypted and stored

@@ -205,7 +205,7 @@ This step installs:
 cd C:\OSL\Claude\RagChatApp\RagChatApp_Server\Database\StoredProcedures
 
 # Install with encrypted API keys
-.\Install-MultiProvider-Fixed.ps1 `
+.\Install-MultiProvider.ps1 `
     -ServerName "YOUR_SERVER\INSTANCE" `
     -DatabaseName "OSL_AI" `
     -GeminiApiKey "AIzaSy-your-gemini-api-key" `
@@ -561,7 +561,7 @@ HeaderContext    15     3072
 EXEC SP_GetDataForLLM_Gemini
     @SearchText = 'sistema operativo richiesto',
     @TopK = 5,
-    @SimilarityThreshold = 0.7;
+    @SimilarityThreshold = 0.6;
 ```
 
 **Expected result columns:**

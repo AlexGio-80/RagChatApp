@@ -71,6 +71,10 @@ public class SqlVectorFunctions
         // Calculate cosine similarity
         double similarity = dotProduct / (magnitude1 * magnitude2);
 
+        // Check for NaN or Infinity (can happen with extreme values)
+        if (double.IsNaN(similarity) || double.IsInfinity(similarity))
+            return 0.0;
+
         // Clamp to [-1, 1] range (handle floating point precision issues)
         if (similarity > 1.0) similarity = 1.0;
         if (similarity < -1.0) similarity = -1.0;
@@ -168,5 +172,59 @@ public class SqlVectorFunctions
         }
 
         return SqlBoolean.True;
+    }
+
+    /// <summary>
+    /// Converts JSON array of floats to VARBINARY embedding using the same format as C# backend
+    /// This ensures compatibility between SQL-generated and C#-generated embeddings
+    /// </summary>
+    /// <param name="jsonArray">JSON array string like "[0.1, 0.2, 0.3, ...]"</param>
+    /// <returns>VARBINARY(MAX) in the same format as Buffer.BlockCopy</returns>
+    [SqlFunction(
+        Name = "fn_JsonArrayToEmbedding",
+        IsDeterministic = true,
+        IsPrecise = false,
+        DataAccess = DataAccessKind.None)]
+    public static SqlBytes JsonArrayToEmbedding(SqlString jsonArray)
+    {
+        if (jsonArray.IsNull)
+            return SqlBytes.Null;
+
+        try
+        {
+            string json = jsonArray.Value.Trim();
+
+            // Remove brackets and whitespace
+            if (json.StartsWith("["))
+                json = json.Substring(1);
+            if (json.EndsWith("]"))
+                json = json.Substring(0, json.Length - 1);
+
+            // Split by comma and parse floats
+            string[] parts = json.Split(',');
+            float[] floats = new float[parts.Length];
+
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string part = parts[i].Trim();
+                if (!float.TryParse(part, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out floats[i]))
+                {
+                    // Try with current culture as fallback
+                    if (!float.TryParse(part, out floats[i]))
+                        return SqlBytes.Null;
+                }
+            }
+
+            // Convert to bytes using Buffer.BlockCopy (same as C# backend)
+            byte[] bytes = new byte[floats.Length * 4];
+            Buffer.BlockCopy(floats, 0, bytes, 0, bytes.Length);
+
+            return new SqlBytes(bytes);
+        }
+        catch
+        {
+            return SqlBytes.Null;
+        }
     }
 }

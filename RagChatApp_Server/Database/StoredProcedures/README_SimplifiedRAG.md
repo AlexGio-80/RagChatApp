@@ -49,7 +49,7 @@ EXEC SP_GetDataForLLM_OpenAI
     @IncludeMetadata = 1,
     @SearchNotes = 1,
     @SearchDetails = 1,
-    @SimilarityThreshold = 0.7;
+    @SimilarityThreshold = 0.6;
 ```
 
 **Parameters:**
@@ -58,7 +58,7 @@ EXEC SP_GetDataForLLM_OpenAI
 - `@IncludeMetadata` (default: 1) - Include full metadata in results
 - `@SearchNotes` (default: 1) - Include search in notes field
 - `@SearchDetails` (default: 1) - Include search in details field
-- `@SimilarityThreshold` (default: 0.7) - Minimum similarity score
+- `@SimilarityThreshold` (default 0.6) - Minimum similarity score
 
 #### `SP_GetDataForLLM_Gemini`
 Simple RAG search using Google Gemini embeddings.
@@ -107,7 +107,7 @@ EXEC SP_GetDataForLLM_OpenAI_WithKey
 - `@IncludeMetadata` (default: 1) - Include full metadata
 - `@SearchNotes` (default: 1) - Include search in notes
 - `@SearchDetails` (default: 1) - Include search in details
-- `@SimilarityThreshold` (default: 0.7) - Minimum similarity score
+- `@SimilarityThreshold` (default 0.6) - Minimum similarity score
 
 #### `SP_GetDataForLLM_Gemini_WithKey`
 RAG search with Gemini embeddings, API key as parameter.

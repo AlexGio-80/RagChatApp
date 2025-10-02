@@ -25,7 +25,7 @@ This folder contains experimental and obsolete scripts that were created during 
 **Lesson Learned**: Must disable "CLR strict security" or use TRUSTWORTHY database
 **Superseded By**: 10_DeployCLRFunctions.sql (direct file path approach)
 
-### Install-MultiProvider.ps1 / Install-MultiProvider-Fixed.ps1
+### Install-MultiProvider.ps1 / Install-MultiProvider.ps1
 **Status**: ⚠️ Obsolete
 **Reason**: Early installation scripts before CLR/VECTOR split
 **Issue**: Mixed concerns, no clear separation between deployment methods
@@ -46,13 +46,13 @@ This folder contains experimental and obsolete scripts that were created during 
 **Archived**: October 1, 2025
 **Reason**: Early unified installation script without encryption or multi-provider support
 **Issue**: No API key encryption, manual configuration required
-**Superseded By**: Install-MultiProvider-Fixed.ps1 (automated, encrypted configuration)
+**Superseded By**: Install-MultiProvider.ps1 (automated, encrypted configuration)
 
 ### 00_InstallAllStoredProcedures_Unified.sql
 **Status**: ⚠️ Obsolete
 **Archived**: October 1, 2025
 **Reason**: Duplicate of 00_InstallAllStoredProcedures.sql with minor variations
-**Superseded By**: Install-MultiProvider-Fixed.ps1
+**Superseded By**: Install-MultiProvider.ps1
 
 ### 03_RAGSearchProcedure.sql
 **Status**: ⚠️ Obsolete
@@ -87,7 +87,7 @@ These files are preserved as:
 
 Use the official installation methods instead:
 - **Complete Setup Guide**: `00_SETUP_GUIDE.md` (start here for new installations)
-- **Multi-Provider Installer**: `Install-MultiProvider-Fixed.ps1` (base system + encryption)
+- **Multi-Provider Installer**: `Install-MultiProvider.ps1` (base system + encryption)
 - **CLR Installation**: `CLR/Install-RAG-CLR.ps1` (vector search via CLR)
 - **VECTOR Installation**: `VECTOR/Install-RAG-VECTOR.ps1` (vector search via SQL 2025)
 
