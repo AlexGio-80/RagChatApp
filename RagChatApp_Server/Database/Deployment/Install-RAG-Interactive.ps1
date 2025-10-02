@@ -38,7 +38,7 @@ SELECT
 "@
 
     try {
-        $result = Invoke-Sqlcmd -ServerInstance $ServerInstance -Database $DatabaseName -Query $query -ErrorAction Stop
+        $result = Invoke-Sqlcmd -ServerInstance $ServerInstance -Database $DatabaseName -Query $query -TrustServerCertificate -ErrorAction Stop
 
         $version = $result.Version
         $majorVersion = [int]($version.Split('.')[0])
@@ -61,8 +61,11 @@ BEGIN CATCH
 END CATCH
 "@
 
-        $vectorResult = Invoke-Sqlcmd -ServerInstance $ServerInstance -Database $DatabaseName -Query $vectorTest -ErrorAction SilentlyContinue
-        $vectorSupported = $vectorResult.VectorSupported -eq 1
+        $vectorResult = Invoke-Sqlcmd -ServerInstance $ServerInstance -Database $DatabaseName -Query $vectorTest -TrustServerCertificate -ErrorAction SilentlyContinue
+        $vectorSupported = $false
+        if ($vectorResult -and $vectorResult.VectorSupported) {
+            $vectorSupported = $vectorResult.VectorSupported -eq 1
+        }
 
         return @{
             MajorVersion = $majorVersion
@@ -90,7 +93,41 @@ function Show-Recommendation {
     Write-Host "============================================" -ForegroundColor Cyan
     Write-Host ""
 
-    if ($ServerInfo.VectorSupported) {
+    Write-Host "DEBUG: In Show-Recommendation" -ForegroundColor Magenta
+    Write-Host "DEBUG: ServerInfo is null: $($null -eq $ServerInfo)" -ForegroundColor Magenta
+    if ($ServerInfo) {
+        Write-Host "DEBUG: MajorVersion is null: $($null -eq $ServerInfo.MajorVersion)" -ForegroundColor Magenta
+        Write-Host "DEBUG: MajorVersion value: $($ServerInfo.MajorVersion)" -ForegroundColor Magenta
+    }
+
+    if ($null -eq $ServerInfo -or $null -eq $ServerInfo.MajorVersion) {
+        Write-Host "⚠️  ERROR: Failed to detect SQL Server version properly" -ForegroundColor Red
+        Write-Host ""
+        return $null
+    }
+
+    Write-Host "DEBUG: Checking version >= 13" -ForegroundColor Magenta
+    $majorVersionInt = [int]$ServerInfo.MajorVersion
+    Write-Host "DEBUG: MajorVersion as int: $majorVersionInt" -ForegroundColor Magenta
+
+    # Check SQL Server version first
+    if ($majorVersionInt -lt 13) {
+        Write-Host "⚠️  WARNING: Unsupported SQL Server Version" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Your version: $($ServerInfo.FullVersion)" -ForegroundColor White
+        Write-Host "Minimum required: SQL Server 2016 (version 13.x)" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "Please upgrade SQL Server to use RAG functionality." -ForegroundColor Yellow
+        return $null
+    }
+
+    Write-Host "DEBUG: Past version check, checking VECTOR support" -ForegroundColor Magenta
+    Write-Host "DEBUG: VectorSupported value: '$($ServerInfo.VectorSupported)'" -ForegroundColor Magenta
+
+    # Check for VECTOR support (SQL Server 2025 RTM+)
+    # Using explicit string comparison to avoid boolean issues
+    if ($ServerInfo.VectorSupported -and $ServerInfo.VectorSupported -ne $false) {
+        Write-Host "DEBUG: Entering VECTOR branch" -ForegroundColor Magenta
         Write-Host "✅ RECOMMENDATION: VECTOR Installation" -ForegroundColor Green
         Write-Host ""
         Write-Host "Your SQL Server supports the native VECTOR type!" -ForegroundColor White
@@ -103,30 +140,21 @@ function Show-Recommendation {
         Write-Host "  ✓ No CLR dependencies" -ForegroundColor White
         return "VECTOR"
     }
-    elseif ($ServerInfo.MajorVersion -ge 13) {
-        # SQL Server 2016+ (version 13+)
-        Write-Host "✅ RECOMMENDATION: CLR Installation" -ForegroundColor Green
-        Write-Host ""
-        Write-Host "Your SQL Server version: $($ServerInfo.FullVersion)" -ForegroundColor White
-        Write-Host "VECTOR type: Not available (requires SQL Server 2025 RTM)" -ForegroundColor Yellow
-        Write-Host ""
-        Write-Host "CLR Installation Benefits:" -ForegroundColor Yellow
-        Write-Host "  ✓ Compatible with SQL Server 2016-2025 RC" -ForegroundColor White
-        Write-Host "  ✓ Production-ready and stable" -ForegroundColor White
-        Write-Host "  ✓ Accurate cosine similarity" -ForegroundColor White
-        Write-Host "  ✓ Tested with real workloads" -ForegroundColor White
-        Write-Host "  ✓ Available today" -ForegroundColor White
-        return "CLR"
-    }
-    else {
-        Write-Host "⚠️  WARNING: Unsupported SQL Server Version" -ForegroundColor Red
-        Write-Host ""
-        Write-Host "Your version: $($ServerInfo.FullVersion)" -ForegroundColor White
-        Write-Host "Minimum required: SQL Server 2016 (version 13.x)" -ForegroundColor Yellow
-        Write-Host ""
-        Write-Host "Please upgrade SQL Server to use RAG functionality." -ForegroundColor Yellow
-        return $null
-    }
+
+    # Default to CLR for all other cases
+    Write-Host "DEBUG: Defaulting to CLR installation" -ForegroundColor Magenta
+    Write-Host "✅ RECOMMENDATION: CLR Installation" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Your SQL Server version: $($ServerInfo.FullVersion)" -ForegroundColor White
+    Write-Host "VECTOR type: Not available (requires SQL Server 2025 RTM)" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "CLR Installation Benefits:" -ForegroundColor Yellow
+    Write-Host "  ✓ Compatible with SQL Server 2016-2025 RC" -ForegroundColor White
+    Write-Host "  ✓ Production-ready and stable" -ForegroundColor White
+    Write-Host "  ✓ Accurate cosine similarity" -ForegroundColor White
+    Write-Host "  ✓ Tested with real workloads" -ForegroundColor White
+    Write-Host "  ✓ Available today" -ForegroundColor White
+    return "CLR"
 }
 
 # Main installation flow
@@ -146,7 +174,16 @@ if ($null -eq $serverInfo) {
 }
 
 # Get recommendation
+Write-Host "DEBUG: ServerInfo object received: $($null -ne $serverInfo)" -ForegroundColor Yellow
+if ($serverInfo) {
+    Write-Host "DEBUG: ServerInfo.MajorVersion = $($serverInfo.MajorVersion)" -ForegroundColor Yellow
+    Write-Host "DEBUG: ServerInfo.FullVersion = $($serverInfo.FullVersion)" -ForegroundColor Yellow
+    Write-Host "DEBUG: ServerInfo.VectorSupported = $($serverInfo.VectorSupported)" -ForegroundColor Yellow
+}
+
 $recommendation = Show-Recommendation -ServerInfo $serverInfo
+
+Write-Host "DEBUG: Recommendation returned: $recommendation" -ForegroundColor Yellow
 
 if ($null -eq $recommendation) {
     Write-Host ""

@@ -6,7 +6,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [string]$ServerName = "DEV-ALEX\MSSQLSERVER01",
+    [string]$ServerInstance = "DEV-ALEX\MSSQLSERVER01",
 
     [Parameter(Mandatory=$false)]
     [string]$DatabaseName = "OSL_AI",
@@ -68,7 +68,7 @@ Write-Host "RAG Chat Application - Multi-Provider AI Installation" -ForegroundCo
 Write-Host "=========================================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Configuration:" -ForegroundColor Cyan
-Write-Host "   Server: $ServerName" -ForegroundColor Gray
+Write-Host "   Server: $ServerInstance" -ForegroundColor Gray
 Write-Host "   Database: $DatabaseName" -ForegroundColor Gray
 Write-Host "   Authentication: $AuthenticationType" -ForegroundColor Gray
 Write-Host ""
@@ -83,9 +83,9 @@ $ScriptDir = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
 
 # Build connection string
 if ($AuthenticationType -eq "Integrated") {
-    $ConnectionString = "Server=$ServerName;Database=$DatabaseName;Integrated Security=True;TrustServerCertificate=True;"
+    $ConnectionString = "Server=$ServerInstance;Database=$DatabaseName;Integrated Security=True;TrustServerCertificate=True;"
 } else {
-    $ConnectionString = "Server=$ServerName;Database=$DatabaseName;User Id=$Username;Password=$Password;TrustServerCertificate=True;"
+    $ConnectionString = "Server=$ServerInstance;Database=$DatabaseName;User Id=$Username;Password=$Password;TrustServerCertificate=True;"
 }
 
 function Execute-SqlScript {
