@@ -75,6 +75,7 @@ BEGIN
             DocumentId INT,
             DocumentChunkId INT,
             FileName NVARCHAR(255),
+            DocumentPath NVARCHAR(500),
             Content NVARCHAR(MAX),
             HeaderContext NVARCHAR(MAX),
             Notes NVARCHAR(MAX),
@@ -93,6 +94,7 @@ BEGIN
             d.Id,
             dc.Id,
             d.FileName,
+            d.Path,
             dc.Content,
             dc.HeaderContext,
             dc.Notes,
@@ -120,6 +122,7 @@ BEGIN
                 d.Id,
                 dc.Id,
                 d.FileName,
+                d.Path,
                 dc.Content,
                 dc.HeaderContext,
                 dc.Notes,
@@ -150,6 +153,7 @@ BEGIN
                 d.Id,
                 dc.Id,
                 d.FileName,
+                d.Path,
                 dc.Content,
                 dc.HeaderContext,
                 dc.Notes,
@@ -178,6 +182,7 @@ BEGIN
             d.Id,
             dc.Id,
             d.FileName,
+            d.Path,
             dc.Content,
             dc.HeaderContext,
             dc.Notes,
@@ -209,6 +214,7 @@ BEGIN
                 sr.DocumentId,
                 sr.DocumentChunkId,
                 sr.FileName,
+                sr.DocumentPath,
                 sr.Content,
                 sr.HeaderContext,
                 sr.Notes,
@@ -225,6 +231,7 @@ BEGIN
                 sr.DocumentId,
                 sr.DocumentChunkId,
                 sr.FileName,
+                sr.DocumentPath,
                 sr.Content,
                 sr.HeaderContext,
                 sr.Notes,
@@ -237,22 +244,26 @@ BEGIN
         END
         ELSE
         BEGIN
-            -- Minimal version
+            -- Minimal version (optimized for LLM)
             SELECT TOP (@TopK)
-                sr.DocumentId,
-                sr.DocumentChunkId,
                 sr.FileName,
+                sr.DocumentPath,
                 sr.Content,
-                MAX(sr.Similarity) AS MaxSimilarity,
-                sr.ChunkIndex
+                sr.HeaderContext,
+                sr.Notes,
+                sr.Details,
+                MAX(sr.Similarity) AS MaxSimilarity
             FROM #SearchResults sr
             WHERE sr.Similarity >= @SimilarityThreshold
             GROUP BY
                 sr.DocumentId,
                 sr.DocumentChunkId,
                 sr.FileName,
+                sr.DocumentPath,
                 sr.Content,
-                sr.ChunkIndex
+                sr.HeaderContext,
+                sr.Notes,
+                sr.Details
             ORDER BY MaxSimilarity DESC;
         END
 
