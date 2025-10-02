@@ -31,7 +31,7 @@ CREATE PROCEDURE [dbo].[SP_GetDataForLLM_OpenAI_WithKey]
     @TopK INT = 10,
     @BaseUrl NVARCHAR(500) = NULL,
     @Model NVARCHAR(100) = 'text-embedding-3-small',
-    @IncludeMetadata BIT = 1,
+    @IncludeMetadata BIT = 0,
     @SearchNotes BIT = 1,
     @SearchDetails BIT = 1,
     @SimilarityThreshold FLOAT = 0.6
@@ -95,7 +95,7 @@ CREATE PROCEDURE [dbo].[SP_GetDataForLLM_Gemini_WithKey]
     @TopK INT = 10,
     @BaseUrl NVARCHAR(500) = NULL,
     @Model NVARCHAR(100) = 'models/embedding-001',
-    @IncludeMetadata BIT = 1,
+    @IncludeMetadata BIT = 0,
     @SearchNotes BIT = 1,
     @SearchDetails BIT = 1,
     @SimilarityThreshold FLOAT = 0.6
@@ -160,7 +160,7 @@ CREATE PROCEDURE [dbo].[SP_GetDataForLLM_AzureOpenAI_WithKey]
     @DeploymentName NVARCHAR(100),
     @TopK INT = 10,
     @ApiVersion NVARCHAR(50) = '2024-02-15-preview',
-    @IncludeMetadata BIT = 1,
+    @IncludeMetadata BIT = 0,
     @SearchNotes BIT = 1,
     @SearchDetails BIT = 1,
     @SimilarityThreshold FLOAT = 0.6

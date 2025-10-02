@@ -54,7 +54,7 @@ GO
 CREATE PROCEDURE [dbo].[SP_GetDataForLLM_OpenAI]
     @SearchText NVARCHAR(MAX),
     @TopK INT = 10,
-    @IncludeMetadata BIT = 1,
+    @IncludeMetadata BIT = 0,
     @SearchNotes BIT = 1,
     @SearchDetails BIT = 1,
     @SimilarityThreshold FLOAT = 0.6
@@ -123,7 +123,7 @@ GO
 CREATE PROCEDURE [dbo].[SP_GetDataForLLM_Gemini]
     @SearchText NVARCHAR(MAX),
     @TopK INT = 10,
-    @IncludeMetadata BIT = 1,
+    @IncludeMetadata BIT = 0,
     @SearchNotes BIT = 1,
     @SearchDetails BIT = 1,
     @SimilarityThreshold FLOAT = 0.6
@@ -192,7 +192,7 @@ GO
 CREATE PROCEDURE [dbo].[SP_GetDataForLLM_AzureOpenAI]
     @SearchText NVARCHAR(MAX),
     @TopK INT = 10,
-    @IncludeMetadata BIT = 1,
+    @IncludeMetadata BIT = 0,
     @SearchNotes BIT = 1,
     @SearchDetails BIT = 1,
     @SimilarityThreshold FLOAT = 0.6
