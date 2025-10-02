@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 RagChatApp - An advanced RAG (Retrieval-Augmented Generation) chat application that allows users to upload documents and chat with AI using the content as context. The system features multi-field embedding search, intelligent document processing, comprehensive SQL interface alongside REST API, and **AES-256 encrypted API key storage**.
 
-**Latest Update**: October 1, 2025 - Implemented AES-256 encryption for API keys with automated PowerShell installer, fixed multi-provider SQL procedures, and enhanced security infrastructure.
+**Latest Update**: October 2, 2025 - Complete deployment package with RAG installation (CLR/VECTOR choice), interactive installer, and unified production installation guide.
 
 ## Architecture
 
@@ -148,6 +148,183 @@ tree /F RagChatApp_UI
 # Alternative with PowerShell
 Get-ChildItem -Recurse -Name
 ```
+
+## 🚀 Production Deployment
+
+### 📦 Creating Deployment Package
+
+For production deployment where .NET development environment is **not available**:
+
+```powershell
+# Navigate to deployment folder
+cd RagChatApp_Server/Database/Deployment
+
+# Create complete deployment package (with compiled binaries)
+.\Create-DeploymentPackage.ps1
+
+# Output: RagChatApp_DeploymentPackage_YYYYMMDD_HHMMSS.zip
+```
+
+**Package includes**:
+- ✅ **Compiled application binaries** (.exe + dependencies) - Ready to run
+- ✅ `appsettings.json` template - No credentials, ready to configure
+- ✅ `01_DatabaseSchema.sql` - Complete database schema (idempotent, safe to rerun)
+- ✅ `Install-WindowsService.ps1` - Automated Windows Service installer
+- ✅ `Install-RAG-Interactive.ps1` - Interactive RAG installer (CLR/VECTOR choice)
+- ✅ `00_PRODUCTION_SETUP_GUIDE.md` - **Single comprehensive installation guide**
+- ✅ Stored procedures (optional, for SQL interface)
+- ✅ RAG implementations (CLR + VECTOR with installers and docs)
+- ✅ Encryption scripts (optional, for encrypted API keys)
+- ✅ Deployment checklist and documentation
+
+**Package options**:
+```powershell
+# Full package (default - recommended)
+.\Create-DeploymentPackage.ps1
+
+# Database only (no application binaries)
+.\Create-DeploymentPackage.ps1 -IncludeApplication:$false
+
+# REST API only (no stored procedures)
+.\Create-DeploymentPackage.ps1 -IncludeStoredProcedures:$false
+
+# Custom output location
+.\Create-DeploymentPackage.ps1 -OutputPath "C:\Releases\RagChatApp_v1.3.1"
+```
+
+**See**: `Database/Deployment/README_PACKAGE_CREATION.md` for full documentation
+
+### 🗄️ Production Database Setup
+
+**Quick Start** (REST API only):
+```sql
+-- 1. Create database
+CREATE DATABASE RagChatAppDB;
+GO
+
+-- 2. Run schema script (idempotent - safe to rerun)
+USE RagChatAppDB;
+:r "01_DatabaseSchema.sql"
+GO
+
+-- 3. Verify installation
+SELECT * FROM __EFMigrationsHistory ORDER BY MigrationId;
+-- Should show 3 migrations applied
+```
+
+**Full Installation** (REST API + SQL Interface + RAG):
+```powershell
+# 1. Run schema script (as above)
+
+# 2. Install stored procedures with encryption
+cd Database/StoredProcedures
+.\Install-MultiProvider-Fixed.ps1 `
+    -ServerInstance "YOUR_SERVER\INSTANCE" `
+    -DatabaseName "RagChatAppDB" `
+    -GeminiApiKey "your-key" `
+    -OpenAIApiKey "your-key" `
+    -TestAfterInstall
+
+# 3. Install RAG search (interactive - auto-detects CLR/VECTOR)
+cd ../..
+.\Install-RAG-Interactive.ps1 `
+    -ServerInstance "YOUR_SERVER\INSTANCE" `
+    -DatabaseName "RagChatAppDB" `
+    -DefaultProvider "Gemini"
+
+# 4. Backup encryption certificate (CRITICAL!)
+# See Database/Deployment/README_DEPLOYMENT.md
+```
+
+### 🔍 RAG Installation (CLR vs VECTOR)
+
+The application supports two RAG search implementations:
+
+**CLR (Recommended - SQL Server 2016+)**:
+- Uses SQL CLR functions for vector similarity
+- Production-ready and stable
+- Works with SQL Server 2016-2025 RC
+
+**VECTOR (Future - SQL Server 2025 RTM+)**:
+- Uses native VECTOR type
+- Better performance
+- Requires SQL Server 2025 RTM (not yet available)
+
+**Interactive installer** (auto-detects best option):
+```powershell
+.\Install-RAG-Interactive.ps1 `
+    -ServerInstance "localhost\SQLEXPRESS" `
+    -DatabaseName "RagChatAppDB" `
+    -DefaultProvider "Gemini"
+```
+
+**Manual installation** (CLR):
+```powershell
+cd Database/StoredProcedures/CLR
+.\Install-RAG-CLR.ps1 `
+    -ServerInstance "localhost\SQLEXPRESS" `
+    -DatabaseName "RagChatAppDB"
+```
+
+**See**: `README_RAG_INSTALLATION.md` for detailed comparison and troubleshooting
+
+### ⚙️ Application Configuration
+
+Update `appsettings.json` (production):
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=YOUR_SERVER;Database=RagChatAppDB;User Id=YOUR_USER;Password=YOUR_PASSWORD;TrustServerCertificate=True;"
+  },
+  "AIProvider": {
+    "DefaultProvider": "Gemini",
+    "Gemini": {
+      "ApiKey": "your-gemini-api-key",
+      "BaseUrl": "https://generativelanguage.googleapis.com/v1beta",
+      "Model": "models/embedding-001"
+    }
+  }
+}
+```
+
+**Security Best Practice** - Use environment variables:
+```bash
+# Linux/Mac
+export ConnectionStrings__DefaultConnection="Server=...;Database=...;"
+export AIProvider__Gemini__ApiKey="your-key"
+
+# Windows PowerShell
+$env:ConnectionStrings__DefaultConnection="Server=...;Database=...;"
+$env:AIProvider__Gemini__ApiKey="your-key"
+```
+
+### 🔄 Database Updates (Production)
+
+When deploying new versions with schema changes:
+
+```bash
+# 1. Generate new schema script (from dev environment)
+cd RagChatApp_Server
+dotnet ef migrations script --idempotent --output "Database/Deployment/01_DatabaseSchema.sql"
+
+# 2. In production (no .NET needed)
+# Run the updated script - it's idempotent!
+sqlcmd -S SERVER -d RagChatAppDB -i "01_DatabaseSchema.sql"
+```
+
+**Or use auto-migration** (if .NET runtime available):
+```bash
+# Application will auto-migrate on startup
+dotnet RagChatApp_Server.dll
+# Checks __EFMigrationsHistory and applies pending migrations
+```
+
+### 📋 Deployment Documentation
+
+- **Complete Guide**: `Database/Deployment/README_DEPLOYMENT.md`
+- **Deployment Checklist**: Generated with deployment package
+- **Database Schema**: `/Documentation/DatabaseSchemas/rag-database-schema.md`
+- **Configuration**: `/Documentation/ConfigurationGuides/setup-configuration-guide.md`
 
 ### 📋 Pre-Deployment Checklist
 

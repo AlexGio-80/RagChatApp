@@ -1,4 +1,16 @@
-# RAG Chat App - CLR Installation Guide
+# RAG Chat App - CLR Installation Reference
+
+> **📖 NOTE**: This is a **technical reference** for CLR installation details.
+>
+> **For production installation**, see: `../../../00_PRODUCTION_SETUP_GUIDE.md` (Section 1.6)
+>
+> This file provides:
+> - Detailed CLR setup instructions
+> - Troubleshooting and error resolution
+> - Performance optimization tips
+> - Advanced configuration options
+
+---
 
 ## Overview
 

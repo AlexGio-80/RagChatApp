@@ -1,4 +1,15 @@
-# RAG Chat App - Installation Guide
+# RAG Chat App - Installation Reference Guide
+
+> **📖 NOTE**: This is a **reference guide** for technical details about RAG installation options.
+>
+> **For production installation**, see: `../../00_PRODUCTION_SETUP_GUIDE.md` (Section 1.6)
+>
+> This file provides:
+> - Comparison between CLR and VECTOR implementations
+> - Technical details and performance characteristics
+> - Troubleshooting and optimization tips
+
+---
 
 ## 🎯 Choose Your Installation Path
 

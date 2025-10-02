@@ -1,4 +1,16 @@
-# RAG Chat App - VECTOR Installation Guide
+# RAG Chat App - VECTOR Installation Reference
+
+> **📖 NOTE**: This is a **technical reference** for VECTOR installation details.
+>
+> **For production installation**, see: `../../../00_PRODUCTION_SETUP_GUIDE.md` (Section 1.6)
+>
+> This file provides:
+> - Detailed VECTOR type setup instructions
+> - Migration from CLR to VECTOR
+> - Troubleshooting and compatibility checks
+> - Performance optimization tips
+
+---
 
 ## Overview
 

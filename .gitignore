@@ -339,5 +339,9 @@ RagChatApp_Server/Uploads/
 # Development settings with local API keys (not tracked)
 **/appsettings.Development.json
 
+# Deployment package files (generated artifacts - not tracked)
+**/Database/Deployment/DeploymentPackage/
+**/Database/Deployment/RagChatApp_DeploymentPackage_*.zip
+
 # But do track solution files
 !*.sln

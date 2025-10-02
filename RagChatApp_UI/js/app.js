@@ -1,6 +1,6 @@
 // Configuration
 const CONFIG = {
-    API_BASE_URL: 'https://localhost:7185/api', // Adjust based on your server configuration
+    API_BASE_URL: 'https://localhost:5001/api', // Adjust based on your server configuration
     MAX_FILE_SIZE: 50 * 1024 * 1024, // 50MB
     SUPPORTED_FILE_TYPES: ['.txt', '.pdf', '.doc', '.docx'],
     TOAST_DURATION: 5000
