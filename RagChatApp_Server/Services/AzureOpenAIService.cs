@@ -84,7 +84,7 @@ public class AzureOpenAIService : IAzureOpenAIService
 
         if (_isMockMode)
         {
-            return await FindSimilarChunksMockAsync(query, maxResults);
+            return await FindSimilarChunksMockAsync(query, maxResults, similarityThreshold);
         }
 
         // Get configuration for max chunks
@@ -95,25 +95,32 @@ public class AzureOpenAIService : IAzureOpenAIService
         // Clean old cache entries (older than 1 hour)
         await CleanSemanticCacheAsync();
 
-        // Check semantic cache first
+        // NOTE: Semantic cache disabled for RAG searches to respect maxResults and similarityThreshold parameters
+        // The cache was returning a single cached result, ignoring the search parameters
+        // TODO: Implement parameter-aware caching in future version
+
+        /* DISABLED - Cache bypass issue
         var cachedResult = await CheckSemanticCacheAsync(query);
         if (cachedResult != null)
         {
             _logger.LogInformation("Found cached result for query: {Query}", query);
             return new List<ChatSource> { cachedResult };
         }
+        */
 
         // Generate embedding for the query
         var queryEmbedding = await GenerateEmbeddingsAsync(query);
 
         // Perform multi-field vector search using SQL with LEAST function
-        var results = await PerformMultiFieldVectorSearchAsync(queryEmbedding, effectiveMaxResults);
+        var results = await PerformMultiFieldVectorSearchAsync(queryEmbedding, effectiveMaxResults, similarityThreshold);
 
-        // Cache the best result for future searches
+        // NOTE: Caching disabled until parameter-aware caching is implemented
+        /* DISABLED - Cache bypass issue
         if (results.Any())
         {
             await CacheSemanticResultAsync(query, results.First());
         }
+        */
 
         _logger.LogInformation("Found {ResultCount} similar chunks for query: {Query}", results.Count, query);
         return results;
@@ -193,27 +200,26 @@ public class AzureOpenAIService : IAzureOpenAIService
         return ConvertFloatArrayToByteArray(embedding);
     }
 
-    private async Task<List<ChatSource>> FindSimilarChunksMockAsync(string query, int maxResults)
+    private async Task<List<ChatSource>> FindSimilarChunksMockAsync(string query, int maxResults, double similarityThreshold)
     {
         // Extract meaningful keywords from query
         var keywords = ExtractKeywords(query);
-        
+
         // Improved text-based search for mock mode
         var chunks = await _context.DocumentChunks
             .Include(c => c.Document)
-            .Where(c => 
+            .Where(c =>
                 // Full phrase match (highest priority)
                 c.Content.ToLower().Contains(query.ToLower()) ||
                 (c.HeaderContext != null && c.HeaderContext.ToLower().Contains(query.ToLower())) ||
                 // Keyword matching (fallback)
-                keywords.Any(keyword => 
+                keywords.Any(keyword =>
                     c.Content.ToLower().Contains(keyword.ToLower()) ||
                     (c.HeaderContext != null && c.HeaderContext.ToLower().Contains(keyword.ToLower()))
                 )
             )
             .OrderBy(c => c.DocumentId)  // First order by document
             .ThenBy(c => c.ChunkIndex)   // Then by chunk order within document
-            .Take(maxResults)
             .ToListAsync();
 
         // Calculate relevance scores after database query
@@ -227,7 +233,13 @@ public class AzureOpenAIService : IAzureOpenAIService
             Notes = c.Notes,
             Details = c.Details,
             SimilarityScore = CalculateRelevanceScore(c, query, keywords)
-        }).ToList();
+        })
+        .Where(c => c.SimilarityScore >= similarityThreshold)  // ← FIX: Apply threshold filter
+        .Take(maxResults)
+        .ToList();
+
+        _logger.LogInformation("Mock search found {Count} chunks above threshold {Threshold:F3}",
+            result.Count, similarityThreshold);
 
         return result;
     }
@@ -408,83 +420,107 @@ public class AzureOpenAIService : IAzureOpenAIService
         }
     }
 
-    private async Task<List<ChatSource>> PerformMultiFieldVectorSearchAsync(byte[] queryEmbedding, int maxResults)
+    private async Task<List<ChatSource>> PerformMultiFieldVectorSearchAsync(byte[] queryEmbedding, int maxResults, double similarityThreshold)
     {
         try
         {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
             // Convert byte[] to float[] for comparison
             var queryVector = ConvertByteArrayToFloatArray(queryEmbedding);
 
-            // Get all chunks with their embeddings
+            // OPTIMIZED: Use raw SQL with projection to load only embeddings data (much faster)
+            // This avoids EF Core's heavy Include() and loads exactly what we need
             var chunks = await _context.DocumentChunks
-                .Include(c => c.Document)
-                .Include(c => c.ContentEmbedding)
-                .Include(c => c.HeaderContextEmbedding)
-                .Include(c => c.NotesEmbedding)
-                .Include(c => c.DetailsEmbedding)
-                .Where(c => c.ContentEmbedding != null ||
-                           c.HeaderContextEmbedding != null ||
-                           c.NotesEmbedding != null ||
-                           c.DetailsEmbedding != null)
+                .AsNoTracking()
+                .Select(c => new
+                {
+                    Chunk = c,
+                    DocumentName = c.Document.FileName,
+                    DocumentPath = c.Document.Path,
+                    ContentEmbedding = c.ContentEmbedding != null ? c.ContentEmbedding.Embedding : null,
+                    HeaderContextEmbedding = c.HeaderContextEmbedding != null ? c.HeaderContextEmbedding.Embedding : null,
+                    NotesEmbedding = c.NotesEmbedding != null ? c.NotesEmbedding.Embedding : null,
+                    DetailsEmbedding = c.DetailsEmbedding != null ? c.DetailsEmbedding.Embedding : null
+                })
+                .Where(x => x.ContentEmbedding != null ||
+                           x.HeaderContextEmbedding != null ||
+                           x.NotesEmbedding != null ||
+                           x.DetailsEmbedding != null)
                 .ToListAsync();
 
-            // Calculate similarity scores in memory using cosine similarity
-            var scoredChunks = new List<(DocumentChunk chunk, double score)>();
+            var loadTime = stopwatch.ElapsedMilliseconds;
 
-            foreach (var chunk in chunks)
+            // OPTIMIZATION: Parallel processing for similarity calculation
+            var scoredChunks = new System.Collections.Concurrent.ConcurrentBag<(DocumentChunk chunk, string docName, string? docPath, double score)>();
+
+            Parallel.ForEach(chunks, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, item =>
             {
                 var similarities = new List<double>();
 
                 // Check Content embedding
-                if (chunk.ContentEmbedding != null)
+                if (item.ContentEmbedding != null)
                 {
-                    var embVector = ConvertByteArrayToFloatArray(chunk.ContentEmbedding.Embedding);
+                    var embVector = ConvertByteArrayToFloatArray(item.ContentEmbedding);
                     similarities.Add(CosineSimilarity(queryVector, embVector));
                 }
 
                 // Check HeaderContext embedding
-                if (chunk.HeaderContextEmbedding != null)
+                if (item.HeaderContextEmbedding != null)
                 {
-                    var embVector = ConvertByteArrayToFloatArray(chunk.HeaderContextEmbedding.Embedding);
+                    var embVector = ConvertByteArrayToFloatArray(item.HeaderContextEmbedding);
                     similarities.Add(CosineSimilarity(queryVector, embVector));
                 }
 
                 // Check Notes embedding
-                if (chunk.NotesEmbedding != null)
+                if (item.NotesEmbedding != null)
                 {
-                    var embVector = ConvertByteArrayToFloatArray(chunk.NotesEmbedding.Embedding);
+                    var embVector = ConvertByteArrayToFloatArray(item.NotesEmbedding);
                     similarities.Add(CosineSimilarity(queryVector, embVector));
                 }
 
                 // Check Details embedding
-                if (chunk.DetailsEmbedding != null)
+                if (item.DetailsEmbedding != null)
                 {
-                    var embVector = ConvertByteArrayToFloatArray(chunk.DetailsEmbedding.Embedding);
+                    var embVector = ConvertByteArrayToFloatArray(item.DetailsEmbedding);
                     similarities.Add(CosineSimilarity(queryVector, embVector));
                 }
 
                 // Use maximum similarity across all fields
                 if (similarities.Any())
                 {
-                    scoredChunks.Add((chunk, similarities.Max()));
+                    scoredChunks.Add((item.Chunk, item.DocumentName, item.DocumentPath, similarities.Max()));
                 }
-            }
+            });
 
-            // Sort by similarity (highest first) and take top results
+            var computeTime = stopwatch.ElapsedMilliseconds - loadTime;
+
+            // Filter by similarity threshold FIRST, then sort and take top results
             var topChunks = scoredChunks
+                .Where(x => x.score >= similarityThreshold)
                 .OrderByDescending(x => x.score)
                 .Take(maxResults)
                 .ToList();
 
-            _logger.LogInformation("Vector search found {Count} chunks, top score: {TopScore:F3}",
+            stopwatch.Stop();
+
+            // Log detailed performance metrics
+            var maxScore = scoredChunks.Any() ? scoredChunks.Max(x => x.score) : 0;
+            _logger.LogInformation(
+                "OPTIMIZED Vector search: Total={Total}, MaxScore={MaxScore:F3}, Threshold={Threshold:F3}, Results={Results} | Perf: Load={LoadMs}ms, Compute={ComputeMs}ms, Total={TotalMs}ms",
+                scoredChunks.Count,
+                maxScore,
+                similarityThreshold,
                 topChunks.Count,
-                topChunks.FirstOrDefault().score);
+                loadTime,
+                computeTime,
+                stopwatch.ElapsedMilliseconds);
 
             return topChunks.Select(x => new ChatSource
             {
                 DocumentId = x.chunk.DocumentId,
-                DocumentName = x.chunk.Document.FileName,
-                DocumentPath = x.chunk.Document.Path,
+                DocumentName = x.docName,
+                DocumentPath = x.docPath,
                 Content = x.chunk.Content,
                 HeaderContext = x.chunk.HeaderContext,
                 Notes = x.chunk.Notes,

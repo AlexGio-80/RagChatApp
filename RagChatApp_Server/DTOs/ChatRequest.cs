@@ -21,8 +21,9 @@ public class ChatRequest
 
     /// <summary>
     /// Similarity threshold for chunk relevance (0.0 to 1.0)
+    /// Default: 0.5 (recommended for balanced precision/recall)
     /// </summary>
-    public double SimilarityThreshold { get; set; } = 0.7;
+    public double SimilarityThreshold { get; set; } = 0.5;
 }
 
 /// <summary>
