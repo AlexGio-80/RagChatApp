@@ -129,18 +129,30 @@ public class AzureOpenAIService : IAzureOpenAIService
     /// <summary>
     /// Generates a chat response using RAG (Retrieval-Augmented Generation)
     /// </summary>
-    /// <summary>
-    /// Generates a chat response using RAG (Retrieval-Augmented Generation)
-    /// </summary>
     public async Task<ChatResponse> GenerateChatResponseAsync(ChatRequest request)
     {
-        _logger.LogInformation("Generating chat response for message: {Message}", request.Message);
+        _logger.LogInformation("Generating chat response for message: {Message} (ReturnOnlyChunks: {ReturnOnlyChunks})",
+            request.Message, request.ReturnOnlyChunks);
 
         // Find relevant chunks
         var relevantChunks = await FindSimilarChunksAsync(
             request.Message,
             request.MaxChunks,
             request.SimilarityThreshold);
+
+        // If ReturnOnlyChunks is true, return only RAG search results without LLM processing
+        if (request.ReturnOnlyChunks)
+        {
+            _logger.LogInformation("Returning {ChunkCount} RAG chunks without LLM processing (external mode)",
+                relevantChunks.Count);
+
+            return new ChatResponse
+            {
+                Response = string.Empty, // No LLM-generated response
+                Sources = relevantChunks,
+                IsMockResponse = false
+            };
+        }
 
         if (_isMockMode)
         {

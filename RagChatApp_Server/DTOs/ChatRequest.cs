@@ -24,6 +24,14 @@ public class ChatRequest
     /// Default: 0.5 (recommended for balanced precision/recall)
     /// </summary>
     public double SimilarityThreshold { get; set; } = 0.5;
+
+    /// <summary>
+    /// When true, returns only RAG search chunks without LLM-generated response.
+    /// Use this for external integration (e.g., MCP server) where the calling system
+    /// will perform its own LLM processing.
+    /// Default: false (generates complete chat response)
+    /// </summary>
+    public bool ReturnOnlyChunks { get; set; } = false;
 }
 
 /// <summary>
