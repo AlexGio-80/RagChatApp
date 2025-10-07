@@ -4,11 +4,48 @@ using RagChatApp_Server.Models;
 using RagChatApp_Server.Services;
 using RagChatApp_Server.Services.AIProviders;
 using RagChatApp_Server.Services.Interfaces;
+using RagChatApp_Server.Middleware;
+using Serilog;
+using Serilog.Events;
 
-var builder = WebApplication.CreateBuilder(args);
+// Configure Serilog early for application startup logging
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Debug()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
+    .MinimumLevel.Override("System", LogEventLevel.Information)
+    .Enrich.FromLogContext()
+    .Enrich.WithEnvironmentName()
+    .Enrich.WithMachineName()
+    .Enrich.WithThreadId()
+    .WriteTo.Console(
+        outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {SourceContext}{NewLine}  {Message:lj}{NewLine}{Exception}")
+    .WriteTo.File(
+        path: "Logs/ragchatapp-.log",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 30,
+        fileSizeLimitBytes: 100_000_000, // 100MB
+        rollOnFileSizeLimit: true,
+        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] [{SourceContext}] [{ThreadId}] {Message:lj}{NewLine}{Exception}")
+    .CreateLogger();
 
-// Configure application to run as Windows Service
-builder.Host.UseWindowsService();
+try
+{
+    Log.Information("=== Starting RagChatApp Server ===");
+
+    var builder = WebApplication.CreateBuilder(args);
+
+    // Configure Serilog from appsettings.json
+    builder.Host.UseSerilog((context, services, configuration) => configuration
+        .ReadFrom.Configuration(context.Configuration)
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext()
+        .Enrich.WithEnvironmentName()
+        .Enrich.WithMachineName()
+        .Enrich.WithThreadId());
+
+    // Configure application to run as Windows Service
+    builder.Host.UseWindowsService();
 
 // Add services to the container
 builder.Services.AddControllers();
@@ -132,6 +169,9 @@ if (app.Environment.IsDevelopment())
 // Enable CORS
 app.UseCors("AllowAll");
 
+// Add request/response logging middleware
+app.UseMiddleware<RequestResponseLoggingMiddleware>();
+
 // Rate limiting will be added later
 
 app.UseHttpsRedirection();
@@ -154,4 +194,16 @@ app.MapGet("/api/info", (IConfiguration config, AIProviderFactory factory) => ne
     AvailableProviders = factory.GetAvailableProviders().Select(p => p.ToString()).ToArray()
 }).WithName("ApiInfo");
 
-app.Run();
+    Log.Information("=== RagChatApp Server Started Successfully ===");
+    app.Run();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "=== RagChatApp Server terminated unexpectedly ===");
+    throw;
+}
+finally
+{
+    Log.Information("=== Shutting down RagChatApp Server ===");
+    Log.CloseAndFlush();
+}

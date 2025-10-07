@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 RagChatApp - An advanced RAG (Retrieval-Augmented Generation) chat application that allows users to upload documents and chat with AI using the content as context. The system features multi-field embedding search, intelligent document processing, comprehensive SQL interface alongside REST API, and **AES-256 encrypted API key storage**.
 
-**Latest Update**: October 7, 2025 - Fixed Windows Service deployment with required NuGet package (Microsoft.Extensions.Hosting.WindowsServices 9.0.9). Complete deployment package with RAG installation (CLR/VECTOR choice), interactive installer, and unified production installation guide.
+**Latest Update**: October 7, 2025 - Added comprehensive logging system with Serilog (v1.4.0). Features include file rotation, structured logging, automatic HTTP request/response tracing, and 30/90-day retention. Also fixed Windows Service deployment with required NuGet package (Microsoft.Extensions.Hosting.WindowsServices 9.0.9).
 
 ## Architecture
 
@@ -32,8 +32,14 @@ Critical dependencies for RagChatApp_Server:
 - **PdfPig** (0.1.11) - Superior PDF text extraction
 - **Swashbuckle.AspNetCore** (6.4.0) - Swagger/OpenAPI documentation
 - **AspNetCoreRateLimit** (5.0.0) - API rate limiting
+- **Serilog.AspNetCore** (9.0.0) - Structured logging framework
+- **Serilog.Sinks.File** (7.0.0) - File logging with rolling files
+- **Serilog.Enrichers.Environment** (3.0.1) - Environment enrichment for logs
+- **Serilog.Enrichers.Thread** (4.0.0) - Thread ID enrichment for logs
 
-**Important**: `Microsoft.Extensions.Hosting.WindowsServices` is **mandatory** for Windows Service deployment. Without this package, the application will fail to start as a Windows Service with timeout errors.
+**Important**:
+- `Microsoft.Extensions.Hosting.WindowsServices` is **mandatory** for Windows Service deployment. Without this package, the application will fail to start as a Windows Service with timeout errors.
+- Serilog packages provide comprehensive logging to file with automatic rotation (30-day retention for general logs, 90-day for errors)
 
 ### Enhanced Core Features
 - **Advanced Document Processing**: Enhanced PDF processing with PdfPig, intelligent chunking, structure detection
@@ -42,6 +48,7 @@ Critical dependencies for RagChatApp_Server:
 - **Document Opening from Chat**: Click-to-open document feature in chat sources with clipboard fallback
 - **Dual Interface**: Complete REST API + SQL stored procedures for external access
 - **🔐 AES-256 Encrypted API Keys**: Automatic encryption with SQL Server built-in security (NEW v1.3.1)
+- **📊 Comprehensive Logging System**: Serilog with file rotation, structured logging, automatic HTTP request/response tracing (NEW v1.4.0)
 - **Automated Installer**: PowerShell script for one-command setup with encryption
 - **Semantic Caching**: 1-hour TTL caching system for improved performance
 - **Configurable Search**: MaxChunksForLLM parameter (default 10, max 50)
@@ -162,6 +169,96 @@ tree /F RagChatApp_UI
 # Alternative with PowerShell
 Get-ChildItem -Recurse -Name
 ```
+
+## 📊 Logging System (v1.4.0 - NEW)
+
+RagChatApp includes a comprehensive logging system using **Serilog** for production-ready diagnostics and monitoring.
+
+### Key Features
+- **File Logging with Rotation**: Daily rolling files with 30-day retention (90 days for errors)
+- **Structured Logging**: Rich structured data for analysis and querying
+- **Automatic HTTP Tracing**: Middleware logs all HTTP requests/responses with timing
+- **Multiple Sinks**: Console + File (all logs) + File (errors only)
+- **Environment Enrichment**: Machine name, thread ID, environment info
+- **Size Limits**: 100MB per file with automatic rotation
+
+### Log Files Location
+```
+RagChatApp_Server/
+└── Logs/
+    ├── ragchatapp-20251007.log          # General logs (Debug+)
+    ├── ragchatapp-errors-20251007.log   # Errors only (Error+)
+    └── ...
+```
+
+### Log Format
+```
+[2025-10-07 10:30:17.245 +02:00] [INF] [SourceContext] [ThreadId] Message
+```
+
+### Configuration (appsettings.json)
+```json
+{
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Debug",
+      "Override": {
+        "Microsoft": "Information",
+        "Microsoft.EntityFrameworkCore": "Warning"
+      }
+    }
+  }
+}
+```
+
+### Using Logging in Services
+```csharp
+public class MyService
+{
+    private readonly ILogger<MyService> _logger;
+
+    public MyService(ILogger<MyService> logger)
+    {
+        _logger = logger;
+    }
+
+    public async Task ProcessAsync(int id)
+    {
+        _logger.LogInformation("➡️  Entering ProcessAsync - Id: {Id}", id);
+
+        try
+        {
+            // ... logic ...
+            _logger.LogInformation("✅ Completed ProcessAsync - Id: {Id}", id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Error in ProcessAsync - Id: {Id}", id);
+            throw;
+        }
+    }
+}
+```
+
+### Automatic HTTP Request Logging
+All HTTP requests are automatically logged with:
+- **Entry**: `➡️  REQUEST [a1b2c3d4] GET /api/documents`
+- **Exit**: `✅ RESPONSE [a1b2c3d4] GET /api/documents | Status: 200 | Duration: 45ms`
+- **Slow Requests**: `🐌 SLOW REQUEST took 3542ms` (warnings for requests > 3s)
+
+### Querying Logs
+```powershell
+# Find errors
+Select-String -Path "Logs\ragchatapp-*.log" -Pattern "\[ERR\]"
+
+# Find slow requests
+Select-String -Path "Logs\ragchatapp-*.log" -Pattern "SLOW REQUEST"
+
+# Find by RequestId
+Select-String -Path "Logs\ragchatapp-*.log" -Pattern "\[a1b2c3d4\]"
+```
+
+**Complete Guide**: See `RagChatApp_Server/LOGGING_GUIDE.md` for detailed documentation
 
 ## 🚀 Production Deployment
 
