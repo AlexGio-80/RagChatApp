@@ -6,7 +6,8 @@ param(
     [switch]$IncludeStoredProcedures = $true,
     [switch]$IncludeApplication = $true,
     [switch]$IncludeFrontend = $true,
-    [switch]$SkipBuild = $false
+    [switch]$SkipBuild = $false,
+    [switch]$SelfContained = $false
 )
 
 Write-Host "============================================" -ForegroundColor Cyan
@@ -44,13 +45,34 @@ if ($IncludeApplication) {
     if (-not $SkipBuild) {
         Write-Host "  Running dotnet publish..." -ForegroundColor White
 
+        if ($SelfContained) {
+            Write-Host "  Mode: Self-contained (includes .NET Runtime)" -ForegroundColor Cyan
+        } else {
+            Write-Host "  Mode: Framework-dependent (requires .NET Runtime on server)" -ForegroundColor Yellow
+        }
+
         Push-Location $serverProjectPath
         try {
-            # Clean previous build
+            # Clean ALL previous builds (aggressive clean)
+            Write-Host "  Cleaning previous builds..." -ForegroundColor Gray
             & dotnet clean --configuration Release --verbosity quiet
 
+            # Remove bin folder to ensure clean build
+            $binPath = Join-Path $serverProjectPath "bin"
+            if (Test-Path $binPath) {
+                Remove-Item -Path $binPath -Recurse -Force -ErrorAction SilentlyContinue
+            }
+
             # Publish application
-            $publishResult = & dotnet publish --configuration Release --output $publishPath --verbosity minimal 2>&1
+            if ($SelfContained) {
+                # Self-contained: includes .NET runtime (larger, no runtime needed on server)
+                Write-Host "  Publishing self-contained application..." -ForegroundColor Cyan
+                $publishResult = & dotnet publish --configuration Release --output $publishPath --self-contained true --runtime win-x64 /p:PublishSingleFile=false --verbosity minimal 2>&1
+            } else {
+                # Framework-dependent: requires .NET runtime on server (smaller package)
+                Write-Host "  Publishing framework-dependent application..." -ForegroundColor Cyan
+                $publishResult = & dotnet publish --configuration Release --output $publishPath --self-contained false --verbosity minimal 2>&1
+            }
 
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "ERROR: Application build failed!" -ForegroundColor Red
@@ -65,6 +87,7 @@ if ($IncludeApplication) {
         }
     } else {
         Write-Host "  Skipping build (using existing binaries)" -ForegroundColor Yellow
+        Write-Host "  WARNING: Make sure the existing binaries match the deployment mode!" -ForegroundColor Yellow
     }
 
     # Copy published files
@@ -72,6 +95,23 @@ if ($IncludeApplication) {
         Write-Host "  Copying application files..." -ForegroundColor White
         New-Item -ItemType Directory -Path $appPath -Force | Out-Null
         Copy-Item -Path "$publishPath\*" -Destination $appPath -Recurse -Force
+
+        # Verify deployment mode
+        $runtimeConfigPath = Join-Path $appPath "RagChatApp_Server.runtimeconfig.json"
+        if (Test-Path $runtimeConfigPath) {
+            $runtimeConfig = Get-Content $runtimeConfigPath | ConvertFrom-Json
+            if ($SelfContained) {
+                Write-Host "  Verifying self-contained deployment..." -ForegroundColor Gray
+                # Self-contained should have many more DLLs
+                $dllCount = (Get-ChildItem -Path $appPath -Filter "*.dll" | Measure-Object).Count
+                if ($dllCount -lt 200) {
+                    Write-Host "  WARNING: Expected 400+ DLLs for self-contained, found only $dllCount" -ForegroundColor Yellow
+                    Write-Host "  The build may not have been self-contained!" -ForegroundColor Yellow
+                } else {
+                    Write-Host "  OK: Self-contained verified ($dllCount DLLs)" -ForegroundColor Green
+                }
+            }
+        }
 
         # Create appsettings.json template (without sensitive data)
         $templateSettings = @"
@@ -95,7 +135,7 @@ if ($IncludeApplication) {
     }
   },
   "ConnectionStrings": {
-    "DefaultConnection": "Server=YOUR_SERVER\\INSTANCE;Database=OSL_AI;Integrated Security=true;TrustServerCertificate=true"
+    "DefaultConnection": "Server=YOUR_SERVER\\INSTANCE;Database=RagChatAppDB;Integrated Security=true;TrustServerCertificate=true"
   },
   "AIProvider": {
     "DefaultProvider": "OpenAI",
@@ -297,9 +337,18 @@ Write-Host "Copying database schema script and guides..." -ForegroundColor Cyan
 Copy-Item "01_DatabaseSchema.sql" -Destination $dbPath
 Copy-Item "README_DEPLOYMENT.md" -Destination $dbPath
 Copy-Item "00_PRODUCTION_SETUP_GUIDE.md" -Destination $OutputPath
+Copy-Item "QUICK_START_DEPLOYMENT.md" -Destination $OutputPath
+Copy-Item "OFFLINE_DEPLOYMENT_GUIDE.md" -Destination $OutputPath
 Copy-Item "README_RAG_INSTALLATION.md" -Destination $OutputPath
 Copy-Item "Install-WindowsService.ps1" -Destination $OutputPath
 Copy-Item "Install-RAG-Interactive.ps1" -Destination $OutputPath
+Copy-Item "Check-Prerequisites.ps1" -Destination $OutputPath
+Copy-Item "Validate-AppSettings.ps1" -Destination $OutputPath
+Copy-Item "Fix-HttpsConfiguration.ps1" -Destination $OutputPath
+Copy-Item "Fix-PortConflict.ps1" -Destination $OutputPath
+Copy-Item "appsettings.TEMPLATE.json" -Destination $OutputPath
+Copy-Item "appsettings.HTTP-ONLY.json" -Destination $OutputPath
+Copy-Item "appsettings.PORT-8080.json" -Destination $OutputPath
 
 # Copy stored procedures if requested
 if ($IncludeStoredProcedures) {
@@ -377,6 +426,7 @@ Write-Host "Creating deployment instructions..." -ForegroundColor Cyan
 $includeAppText = if ($IncludeApplication) { "YES" } else { "NO" }
 $includeSPText = if ($IncludeStoredProcedures) { "YES" } else { "NO" }
 $includeFEText = if ($IncludeFrontend) { "YES" } else { "NO" }
+$deploymentMode = if ($SelfContained) { "Self-Contained (includes .NET Runtime)" } else { "Framework-Dependent (requires .NET 9.0 Runtime)" }
 
 $deploymentInstructions = @"
 # RagChatApp - Production Deployment Package
@@ -384,6 +434,7 @@ Generated: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 
 ## Package Configuration
 - Application Binaries: $includeAppText
+- Deployment Mode: $deploymentMode
 - Frontend UI: $includeFEText
 - Stored Procedures: $includeSPText
 
@@ -479,7 +530,7 @@ Follow detailed instructions in: \`00_PRODUCTION_SETUP_GUIDE.md\`
 
 - **SQL Server**: 2019 or later / Azure SQL Database
 - **Permissions**: CREATE TABLE, CREATE PROCEDURE, CREATE CERTIFICATE
-- **.NET Runtime**: 9.0 (for application deployment)
+- **.NET Runtime**: $(if ($SelfContained) { "INCLUDED in package (no installation required)" } else { "9.0 required on server (download from https://dotnet.microsoft.com/download/dotnet/9.0)" })
 
 ## Support Documentation
 

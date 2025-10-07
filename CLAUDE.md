@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 RagChatApp - An advanced RAG (Retrieval-Augmented Generation) chat application that allows users to upload documents and chat with AI using the content as context. The system features multi-field embedding search, intelligent document processing, comprehensive SQL interface alongside REST API, and **AES-256 encrypted API key storage**.
 
-**Latest Update**: October 2, 2025 - Complete deployment package with RAG installation (CLR/VECTOR choice), interactive installer, and unified production installation guide.
+**Latest Update**: October 7, 2025 - Fixed Windows Service deployment with required NuGet package (Microsoft.Extensions.Hosting.WindowsServices 9.0.9). Complete deployment package with RAG installation (CLR/VECTOR choice), interactive installer, and unified production installation guide.
 
 ## Architecture
 
@@ -20,6 +20,20 @@ RagChatApp - An advanced RAG (Retrieval-Augmented Generation) chat application t
 - Azure OpenAI integration with multi-field embedding generation
 - Comprehensive SQL stored procedure interface
 - Responsive frontend with glassmorphism design
+
+### Required NuGet Packages
+Critical dependencies for RagChatApp_Server:
+- **Microsoft.AspNetCore.OpenApi** (8.0.4) - OpenAPI/Swagger support
+- **Microsoft.EntityFrameworkCore.SqlServer** (8.0.4) - SQL Server EF provider
+- **Microsoft.EntityFrameworkCore.Tools** (8.0.4) - EF migration tools
+- **Microsoft.Extensions.Hosting.WindowsServices** (9.0.9) - **Windows Service support** (required for deployment)
+- **DocumentFormat.OpenXml** (3.0.1) - Word document processing
+- **itext7** (8.0.2) - PDF processing support
+- **PdfPig** (0.1.11) - Superior PDF text extraction
+- **Swashbuckle.AspNetCore** (6.4.0) - Swagger/OpenAPI documentation
+- **AspNetCoreRateLimit** (5.0.0) - API rate limiting
+
+**Important**: `Microsoft.Extensions.Hosting.WindowsServices` is **mandatory** for Windows Service deployment. Without this package, the application will fail to start as a Windows Service with timeout errors.
 
 ### Enhanced Core Features
 - **Advanced Document Processing**: Enhanced PDF processing with PdfPig, intelligent chunking, structure detection

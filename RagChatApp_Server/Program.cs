@@ -7,6 +7,9 @@ using RagChatApp_Server.Services.Interfaces;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure application to run as Windows Service
+builder.Host.UseWindowsService();
+
 // Add services to the container
 builder.Services.AddControllers();
 
